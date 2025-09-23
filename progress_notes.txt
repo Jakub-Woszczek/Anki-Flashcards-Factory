@@ -1,0 +1,9 @@
+1. 1-C1 - wszystkei słówka są diki compateable, bez misspellings
+2. W bazie są wszystkie talie oprócz: C2,Diki missing
+
+TODO: Trzeba zmienić wyszukiwanie tłumaczeń dla słów które są po polsku i po ang
+TODO: Countdown liczy do 0,
+TODO: Dodać zmienne, ścieżki, tagi, nazwy do .env
+TODO: Dodaj polskie nazwy do obrazkowych C3-C8 + dodaj do ich typu karty odwrotną pl->en
+TODO: "overflow" audio harness nie działa, -n/-v trzeba dodać
+TODO: Delete specyfic functions
