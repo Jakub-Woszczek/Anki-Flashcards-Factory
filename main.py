@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 
 if __name__ == "__main__":
     load_dotenv()
-    
+
     # app = FlashcardApp(r"prepared_notes/to_add_14.txt","English::D1")
     notes_improvement = casualNotesImprovement()
     notes_improvement.check_nbsp()
