@@ -1,23 +1,29 @@
+from PIL.ImImagePlugin import split
+from click import style
 from diki_translate import Diki
 import tkinter as tk
 from tkinter import ttk
+from rich.console import Console
 from ankiConnect import AnkiConnect
 from dikiApi import DikiApi
-from geminiAPI import GeminBot
+from geminiAPI import GeminiBot
 from allNotesDb import NotesDatabase
+from merriamWebsterDictApi import MerriamWebsterDictApi
 
 
 class FlashcardApp:
     def __init__(self, path, deck):
         self.translation_vars = []
         self.tree_frame = None
-        self.gemini_bot = GeminBot()
+        self.gemini_bot = GeminiBot()
         self.words_to_add = []
         self.diki_api = Diki("english")
         self.my_diki_api = DikiApi()
         self.anki_api = AnkiConnect()
         self.notes_db = NotesDatabase()
         self.deck = deck
+        self.appConsole = FlashcardAppConsole()
+        self.sentences = []
 
         self.root = tk.Tk()
         self.root.title("Konstruktor fiszek")
@@ -68,6 +74,20 @@ class FlashcardApp:
         )
         btn_gpt.pack(side="left", padx=10, pady=10)
 
+        btn_gemini_sentences = ttk.Button(
+            footer,
+            text="Gemini sentences",
+            command=lambda: self._on_sentences_request(),
+        )
+        btn_gemini_sentences.pack(side="left", padx=10, pady=10)
+
+        btn_get_definition_and_vis = ttk.Button(
+            footer,
+            text="Def & vis",
+            command=lambda: self._on_def_and_vis_request(),
+        )
+        btn_get_definition_and_vis.pack(side="left", padx=10, pady=10)
+
         self.image_val = tk.IntVar(footer, value=0)
         btn_image = ttk.Checkbutton(footer, text="Image", variable=self.image_val)
         btn_image.pack(side="right", padx=10, pady=10)
@@ -92,6 +112,11 @@ class FlashcardApp:
         )
         btn_edit_val.pack(side="right", padx=10, pady=10)
 
+        self.sentences_label = tk.Label(text="Write sentences (seperated by $ sign)")
+        self.sentences_label.pack()
+        self.sentences_entry = tk.Text(width=40, height=8)
+        self.sentences_entry.pack(pady=10)
+
         self.root.mainloop()
 
     def reload_note(self):
@@ -107,6 +132,7 @@ class FlashcardApp:
         self.error_val.set(0)
         self.gemini_diff_val.set(0)
         self.to_edit_val.set(0)
+        self.sentences = []
 
     def load_words(self, path):
         with open(path, "r") as f:
@@ -183,8 +209,22 @@ class FlashcardApp:
         else:
             audio_string = f"[sound:{self.current_word}.mp3]"
 
+        sentences = self.sentences_entry.get("1.0", "end-1c")
+        if sentences:
+            sentences = split_sentences(sentences)
+            self.sentences.extend(sentences)
+
+        sentences_html = None
+        if self.sentences:
+            sentences_html = sentences_html_generator(self.sentences)
+
         new_note_id = self.anki_api.add_flashcard(
-            self.current_word, back_html, audio_string, self.deck, tags
+            english_word=self.current_word,
+            pl_translation=back_html,
+            audio_en=audio_string,
+            deck=self.deck,
+            tags=tags,
+            sentences=sentences_html,
         )
 
         if new_note_id == None:
@@ -198,6 +238,23 @@ class FlashcardApp:
 
     def _on_description_request(self):
         self.gemini_bot.get_word_translation(self.current_word)
+
+    def _on_sentences_request(self):
+        self.gemini_bot.get_word_sentences(self.current_word)
+
+    def _on_def_and_vis_request(self):
+        vis = self.appConsole.on_def_and_vis_request(self.current_word)
+        if vis:
+            self.sentences.extend(vis)
+
+
+def split_sentences(sentences_string):
+    sentences = [s.strip() for s in sentences_string.split("$") if s.strip()]
+    return sentences
+
+
+def sentences_html_generator(sentences):
+    return "\n<br><br>\n".join(sentences)
 
 
 def parse_translations_to_html(meanings):
@@ -219,3 +276,71 @@ def parse_translations_to_html(meanings):
             final_string += "<br>\n" + meanings_flatten.pop(0)
 
     return final_string
+
+
+class FlashcardAppConsole:
+    def __init__(self):
+        self.merriam_dict = MerriamWebsterDictApi()
+        self.console = Console()
+
+    def on_def_and_vis_request(self, word, data=None):
+        if data is None:
+            data = self.merriam_dict.get_definitions_with_sentences(word)
+
+        if not data:
+            print(f"\033[91mNo definitions found (word unknown)\033[0m")
+            return
+
+        elif isinstance(data[0], tuple):
+            vis_count = 1
+            vis_map = {}
+            prompt = "Choose sentences (separated  by comma): "
+            for word, definition, vis in data:
+                self.console.print(f"\n _____ [bold blue]{word}[/bold blue] _____ ")
+                self.console.print(f"[italic]{definition}[/italic]")
+                if vis:
+                    self.console.print("[yellow]Przykłady:[/yellow]")
+                    for sentence in vis:
+                        self.console.print(f"  {vis_count}. {sentence}", style="dim")
+                        vis_map[vis_count] = sentence
+                        vis_count += 1
+
+            choice = self.console.input(prompt)
+
+            chosen = []
+            for num in choice.split(","):
+                num = num.strip()
+                if num.isdigit() and int(num) in vis_map:
+                    chosen.append(vis_map[int(num)])
+
+            if chosen:
+                print("Accepted sentences:")
+                for sentence in chosen:
+                    self.console.print(f" - {sentence}", style="dim")
+            else:
+                print("No sentences typed")
+
+            return chosen
+
+        elif isinstance(data[0], str):
+            self.console.print(
+                "[red]No exact translation found, words closest found:[/red]",
+                style="dim",
+            )
+            for i, word in enumerate(data):
+                print(f"{i + 1}. {word}")
+            prompt = "Choose new definition by number (or 0 to skip): "
+
+            try:
+                choice = int(self.console.input(prompt))
+            except ValueError:
+                print("That's not a valid integer!")
+                return
+
+            if choice == 0:
+                return
+            if 1 <= choice <= len(data):
+                selected_word = data[choice - 1]
+                data = self.merriam_dict.get_definitions_with_sentences(selected_word)
+                self.on_def_and_vis_request(data)
+                return

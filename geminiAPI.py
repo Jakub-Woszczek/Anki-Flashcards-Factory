@@ -2,19 +2,15 @@ import os
 import google.generativeai as genai
 from rich.console import Console
 from rich.markdown import Markdown
-
-# Ustawienie klucza API z zmiennej środowiskowej
-# api_key = os.getenv("GEMINI_API_KEY")
-# if not api_key:
-#     raise ValueError("Brak klucza API. Upewnij się, że zmienna środowiskowa 'GEMINI_API_KEY' jest ustawiona.")
+from dotenv import load_dotenv
 
 
-class GeminBot:
+class GeminiBot:
     def __init__(self):
+        load_dotenv()
         api_key = os.getenv("GEMINI_API_KEY")
         genai.configure(api_key=api_key)
         self.model = genai.GenerativeModel("gemini-2.5-flash-lite")
-        self.bot_question = "Napisz jedno zdanie o jednorożcu"
         self.console = Console()
 
     def get_answer(self, question):
@@ -27,9 +23,21 @@ class GeminBot:
                 print(m.name)
 
     def get_word_translation(self, word):
-        print(f"Tłumaczenie słowa {word} ...")
-        prompt = f"Przetłumacz słowo {word} na język polski"
+        print(f"Translating {word} ...")
+        prompt = f"Translate word '{word}' into  Polish"
         description = self.get_answer(prompt)
         markdown_renderable = Markdown(description)
         self.console.print(markdown_renderable)
-        return description
+        return None
+
+    def get_word_sentences(self, word: str, translations: list = None):
+        prompt = f"Provide examples of English sentences using the word: {word}"
+
+        if translations:
+            additional_prompt = "given the translations: "
+            prompt = prompt + additional_prompt + ", ".join(translations)
+        response = self.get_answer(prompt)
+        markdown_renderable = Markdown(response)
+        self.console.print(markdown_renderable)
+
+        return None

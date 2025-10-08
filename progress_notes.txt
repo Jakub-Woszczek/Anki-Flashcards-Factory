@@ -7,3 +7,4 @@ TODO: Dodać zmienne, ścieżki, tagi, nazwy do .env
 TODO: Dodaj polskie nazwy do obrazkowych C3-C8 + dodaj do ich typu karty odwrotną pl->en
 TODO: "overflow" audio harness nie działa, -n/-v trzeba dodać
 TODO: Delete specyfic functions
+TODO: In text window (sentences) add an "ADD" button to add those sentences to tha card than to be added when creating card

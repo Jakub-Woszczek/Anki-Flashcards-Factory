@@ -1,14 +1,13 @@
-from allNotesDb import NotesDatabase
-from ankiConnect import AnkiConnect
-from notesModifier import NotesImprovement, casualNotesImprovement
-from preparedNotesAdder import FlashcardApp
-from RawNotesEditor import RawNotesEditor
+import argparse
+from flashcardApp import FlashcardApp
 from dotenv import load_dotenv
 
-if __name__ == "__main__":
-    load_dotenv()
+load_dotenv()
+parser = argparse.ArgumentParser()
+parser.add_argument("-all", "--app", action="store_true", help="Runs flashcard app")
+args = parser.parse_args()
 
-    # app = FlashcardApp(r"prepared_notes/to_add_14.txt","English::D1")
-    notes_improvement = casualNotesImprovement()
-    notes_improvement.check_nbsp()
-    pass
+if args.app:
+    path = r"other/flashcard_app_test_words.txt"
+    test_deck = "English::toSort"
+    app = FlashcardApp(path, test_deck)

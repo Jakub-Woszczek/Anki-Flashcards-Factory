@@ -31,59 +31,76 @@ class MerriamWebsterDictApi:
         Returns list of tuples: (word, definition, sentences)
         """
         json_response = self.fetch_json(word)
-        defs_with_sentences = []
+        if not json_response:
+            return []
 
-        for definitions_struct in json_response:
-            described_word = definitions_struct["hwi"]["hw"]
-            definitions = definitions_struct["def"]
+        elif isinstance(json_response[0], str):
+            return json_response
 
-            # definitions = json_response[0]["def"]
+        elif isinstance(json_response[0], dict):
 
-            # This refers to nouns/verbs ... when word eg. "soil" is simultaneously verb and noun
-            for sseq_dict in definitions:
-                pprint(sseq_dict)
-                sseq = sseq_dict["sseq"]
+            defs_with_sentences = []
+            original_described_word = None
 
-                for sense_struct in sseq:
-                    sense_struct = sense_struct[0]
+            for definitions_struct in json_response:
+                described_word = definitions_struct.get("hwi", {}).get("hw")
+                if not original_described_word:
+                    original_described_word = described_word
+                if not described_word:
+                    continue
 
-                    assert sense_struct[0] == "sense"
-                    defining_text = sense_struct[1][
-                        "dt"
-                    ]  # There should be definition and verbal illustrations
+                definitions = definitions_struct.get("def")
+                if not definitions:
+                    continue
 
-                    verbal_illustrations = []
-                    definition_struct, definition = None, False
-                    for item in defining_text:
-                        if item[0] == "text" and definition_struct is None:
-                            definition_struct = item
-                            definition = self.remove_tokens(definition_struct[1])
-                            if not definition:
-                                continue
+                # This refers to nouns/verbs ... when word eg. "soil" is simultaneously verb and noun
+                for sseq_dict in definitions:
+                    sseq = sseq_dict.get("sseq")
+                    if not isinstance(sseq, list):
+                        continue
 
-                            # print("_____ DEFINITION _____")
-                            # print(definition, end="\n")
+                    for sense_struct_wrapper in sseq:
+                        sense_struct_wrapper = sense_struct_wrapper[0]
 
-                        if item[0] == "vis":
-                            verbal_illustrations.append(item)
+                        sense_struct = sense_struct_wrapper[1]
+                        defining_text = sense_struct.get("dt")
+                        if not defining_text:
+                            continue
 
-                    verbal_illustration_list = []
-                    for verbal_illustration_struct in verbal_illustrations:
-                        for verbal_illustration_dict in verbal_illustration_struct[1]:
-                            verbal_illustration = self.remove_tokens(
-                                verbal_illustration_dict["t"]
+                        verbal_illustrations = []
+                        definition_struct, definition = None, False
+                        for item in defining_text:
+                            if item[0] == "text" and definition_struct is None:
+                                definition_struct = item
+                                definition = self.remove_tokens(definition_struct[1])
+                                if not definition:
+                                    continue
+
+                            if item[0] == "vis":
+                                verbal_illustrations.append(item)
+
+                        verbal_illustration_list = []
+                        for verbal_illustration_struct in verbal_illustrations:
+                            for verbal_illustration_dict in verbal_illustration_struct[
+                                1
+                            ]:
+                                verbal_illustration = self.remove_tokens(
+                                    verbal_illustration_dict["t"]
+                                )
+                                if verbal_illustration[0].isupper():
+                                    verbal_illustration_list.append(verbal_illustration)
+
+                        # Comparison to org word is necessary cause for no apparent reason eg.
+                        # 'void' return also description of 'fill'
+                        if definition and described_word == original_described_word:
+                            defs_with_sentences.append(
+                                (described_word, definition, verbal_illustration_list)
                             )
-                            if verbal_illustration[0].isupper():
-                                verbal_illustration_list.append(verbal_illustration)
-                                # print("• " + verbal_illustration)
-                                # print("")
 
-                    if definition:
-                        defs_with_sentences.append(
-                            (described_word, definition, verbal_illustration_list)
-                        )
+            return defs_with_sentences
 
-        return defs_with_sentences
+        else:
+            raise ValueError("Unsupported API response format")
 
     def remove_tokens(self, text: str) -> str:
         text = re.sub(r"\[=.+?\]", "", text)

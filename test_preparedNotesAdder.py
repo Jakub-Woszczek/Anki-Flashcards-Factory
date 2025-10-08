@@ -3,8 +3,8 @@ from unittest import TestCase
 
 import requests
 
-from preparedNotesAdder import FlashcardApp
-from preparedNotesAdder import parse_translations_to_html
+from flashcardApp import FlashcardApp
+from flashcardApp import parse_translations_to_html
 
 
 class TestPreparedNotesAdder(TestCase):

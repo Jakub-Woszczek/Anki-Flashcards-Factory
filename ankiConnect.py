@@ -162,7 +162,13 @@ class AnkiConnect:
         return note["fields"]["pl_translation"]["value"]
 
     def add_flashcard(
-        self, english_word, pl_translation, audio_en, deck=None, tags=None
+        self,
+        english_word,
+        pl_translation,
+        audio_en,
+        sentences=None,
+        deck=None,
+        tags=None,
     ):
         if deck == None:
             print("Nie podano talii")
@@ -182,6 +188,7 @@ class AnkiConnect:
                 "en_word": english_word,
                 "pl_translation": pl_translation,
                 "audio_en": audio_en,
+                "sentences": sentences,
             },
             "tags": tags or [],
             "options": {"allowDuplicate": False},

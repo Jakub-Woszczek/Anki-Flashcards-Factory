@@ -1,15 +1,25 @@
-from http.client import responses
-from lib2to3.fixes.fix_tuple_params import simplify_args
 from unittest import TestCase
-from geminiAPI import GeminBot
+from geminiAPI import GeminiBot
 
 
-class TestGeminBot(TestCase):
+class TestGeminiBot(TestCase):
 
     def test_get_word_translation(self):
 
-        bot = GeminBot()
+        bot = GeminiBot()
         test_cases = ["ruffled"]
 
         for test_case in test_cases:
             print(bot.get_word_translation(test_case))
+
+    def test_get_word_sentences(self):
+
+        bot = GeminiBot()
+        test_cases = [
+            ("computer", ["komputer", "maszyna licząca"]),
+            ("book", []),
+            ("travel", ["podróż", "podróżować", "wycieczka"]),
+        ]
+
+        for word, translations in test_cases:
+            bot.get_word_sentences(word, translations)
