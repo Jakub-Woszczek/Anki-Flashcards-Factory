@@ -1,5 +1,8 @@
 import os
+from pprint import pprint
+
 import google.generativeai as genai
+from click import style
 from rich.console import Console
 from rich.markdown import Markdown
 from dotenv import load_dotenv
@@ -31,6 +34,7 @@ class GeminiBot:
         return None
 
     def get_word_sentences(self, word: str, translations: list = None):
+        self.console.print(f"Providing sentences for '{word}' ...", style="dim")
         prompt = f"Provide examples of English sentences using the word: {word}"
 
         if translations:

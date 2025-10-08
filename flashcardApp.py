@@ -183,14 +183,21 @@ class FlashcardApp:
     def set_words_left(self):
         self.lbl_words_left.config(text=f"{len(self.words_to_add)} - to add")
 
-    def _on_add(self):
+    def fetch_selected_translations(self):
+        """
+        Fetches selected by user translations and returns list of translations woven with 'SLASH'
+        """
         selected = []
         for row in self.translation_vars:
             row_selected = [t for t, var in row if var.get() == 1]
             if row_selected:
                 selected.append(row_selected)
 
-        back_html = parse_translations_to_html(selected)
+        return [word for l in selected for word in l]
+
+    def _on_add(self):
+
+        back_html = parse_translations_to_html(self.fetch_selected_translations())
         tags = []
         if self.image_val.get() == 1:
             tags.append("IMAGE")
@@ -240,7 +247,8 @@ class FlashcardApp:
         self.gemini_bot.get_word_translation(self.current_word)
 
     def _on_sentences_request(self):
-        self.gemini_bot.get_word_sentences(self.current_word)
+        current_translations = self.fetch_selected_translations()
+        self.gemini_bot.get_word_sentences(self.current_word, current_translations)
 
     def _on_def_and_vis_request(self):
         vis = self.appConsole.on_def_and_vis_request(self.current_word)
@@ -258,22 +266,21 @@ def sentences_html_generator(sentences):
 
 
 def parse_translations_to_html(meanings):
-    """Accepts nested list of translations with slashes"""
-    meanings_flatten = [word for nested_list in meanings for word in nested_list]
-    if not meanings_flatten:
+
+    if not meanings:
         return ""
 
-    final_string = meanings_flatten.pop(0)
-    while meanings_flatten:
+    final_string = meanings.pop(0)
+    while meanings:
 
-        word = meanings_flatten.pop(0)
+        word = meanings.pop(0)
         if word != "SLASH":
             final_string += ", " + word
         else:
-            if not meanings_flatten:
+            if not meanings:
                 print("ERROR - slash nie może być ostatni")
                 return final_string
-            final_string += "<br>\n" + meanings_flatten.pop(0)
+            final_string += "<br>\n" + meanings.pop(0)
 
     return final_string
 
