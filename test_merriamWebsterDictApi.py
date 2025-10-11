@@ -9,14 +9,14 @@ class TestMerriamWebsterDictApi(TestCase):
 
     def test_fetch_json(self):
         try:
-            data = self.merriamWebsterDictApi.fetch_json("soiel")
+            data = self.merriamWebsterDictApi.fetch_json("redemption")
             print(data)
         except Exception as e:
             print(f"\033[91m{e}\033[0m")  # Red print
 
     def test_get_definitions_with_sentences(self):
-        test_data = ["test", "car", "flawlessly", "soil", "void"]
-        test_case = test_data[4]
+        test_data = ["test", "car", "flawlessly", "soil", "void","redemption"]
+        test_case = test_data[5]
         data = self.merriamWebsterDictApi.get_definitions_with_sentences(test_case)
 
         for described_word, definition, vis_list in data:

@@ -159,7 +159,7 @@ class AnkiConnect:
             return None
         note = notes[0]
 
-        return note["fields"]["pl_translation"]["value"]
+        return note["fields"]["en_word"]["value"]
 
     def add_flashcard(
         self,
