@@ -7,9 +7,7 @@ from bs4 import BeautifulSoup
 
 class DikiApi:
     def __init__(self):
-        self.audio_path = (
-            r"C:\Users\icefr\AppData\Roaming\Anki2\Użytkownik 1\collection.media"
-        )
+        self.audio_path = os.getenv("ANKI_MEDIA_FOLDER_PATH")
         pass
 
     def dicky_possible_spellings(self, phrase):

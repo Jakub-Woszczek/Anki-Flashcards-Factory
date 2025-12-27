@@ -1,3 +1,4 @@
+import os
 import requests
 
 
@@ -6,15 +7,14 @@ class AnkiConnect:
         self.test_card = 1755110613536
         # self.notes_improvement = NotesImprovement()
         self.MISSPELL_LABEL = "MISSPELL"
-        self.images_folder_path = (
-            r"C:\Users\icefr\AppData\Roaming\Anki2\Użytkownik 1\collection.media"
-        )
+        self.images_folder_path = os.getenv("ANKI_MEDIA_FOLDER_PATH")
+        self.anki_port = os.getenv("ANKI_PORT")
 
     def invoke(self, action, **params):
         """Wyślij żądanie do AnkiConnect i zwróć wynik."""
         try:
             response = requests.post(
-                "http://127.0.0.1:8765",
+                self.anki_port,
                 json={"action": action, "version": 6, "params": params},
             )
             response.raise_for_status()  # Sprawdzenie, czy nie ma błędów HTTP

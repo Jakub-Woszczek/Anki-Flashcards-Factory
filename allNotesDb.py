@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 
 from ankiConnect import AnkiConnect
@@ -6,7 +7,7 @@ from ankiConnect import AnkiConnect
 
 class NotesDatabase:
     def __init__(self):
-        self.db_path = Path("db/all_eng_flashcards.json")
+        self.db_path = Path(os.getenv("DATABASE_PATH"))
         self.anki_api = AnkiConnect()
         self.db = self.load_db()
 
