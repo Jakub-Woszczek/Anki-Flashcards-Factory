@@ -1,6 +1,4 @@
 TODO: Trzeba zmienić wyszukiwanie tłumaczeń dla słów które są po polsku i po ang
 TODO: Countdown liczy do 0,
 TODO: Dodać zmienne, ścieżki, tagi, nazwy do .env
-TODO: "overflow" audio harness nie działa, -n/-v trzeba dodać
-TODO: Delete specific functions
 TODO in utils class add "check database with anki db" (overall db checker)

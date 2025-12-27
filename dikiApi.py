@@ -52,28 +52,50 @@ class DikiApi:
         return suggestions
 
     def diki_audio_harness(self, phrase, audio_path=None):
+        """
+        Metoda pobiera dźwięk danego słowa ze słownika Diki, zapisuje go do folderu z mediami Anek
+        lub do folderu w katalogu projektu, jeżeli @audio_path nie jest None.
+
+        Sprawdza wersje url, czasami słowo występuje tylko w jednym wariancie językowym, en/ame oraz
+        w wariancie dla formy słowa (rzeczownik/czasownik).
+        """
         word = phrase.replace(" ", "_")
-        word = re.sub(r"[^\w_-]", "", word).lower()
+        word = re.sub(
+            r"[^\w_-]", "", word
+        ).lower()  # Deletes all that is not "a-zA-Z0-9_" and -
 
-        safe_phrase = re.sub(r'[<>:"/\\|?*]', "", phrase)
+        # Deletes illegal file symbols (Win,Mac,Linux)
+        illegal_chars = r'[<>:"/\\|?*\0:]'
+        safe_phrase = re.sub(illegal_chars, "", phrase)
 
-        url_british = f"https://www.diki.pl/images-common/en/mp3/{word}.mp3"
-        url_american = f"https://www.diki.pl/images-common/en-ame/mp3/{word}.mp3"
+        langs = ["en", "en-ame"]
+        version = [
+            "",
+            "-v",
+            "-n",
+        ]  # Refers to the version of word like noun of verb (sometimes occurs)
 
-        target_dir = self.audio_path if audio_path is None else audio_path
-        filename = os.path.join(target_dir, f"{safe_phrase}.mp3")
+        for lang in langs:
+            for version in version:
 
-        r_british = requests.get(url_british)
-        if r_british.ok:
-            with open(filename, "wb") as f:
-                f.write(r_british.content)
-            return True
+                target_dir = self.audio_path
+                if audio_path is not None:
+                    target_dir = os.path.join(os.path.dirname(__file__), audio_path)
 
-        r_american = requests.get(url_american)
-        if r_american.ok:
-            with open(filename, "wb") as f:
-                f.write(r_american.content)
-            return True
+                os.makedirs(target_dir, exist_ok=True)
+
+                assert isinstance(target_dir, str)
+                filename = os.path.join(target_dir, f"{safe_phrase}.mp3")
+
+                url = (
+                    f"https://www.diki.pl/images-common/{lang}/mp3/{word}{version}.mp3"
+                )
+                r = requests.get(url)
+                if r.ok:
+                    with open(filename, "wb") as f:
+                        f.write(r.content)
+                    return True
+
         return False
 
 

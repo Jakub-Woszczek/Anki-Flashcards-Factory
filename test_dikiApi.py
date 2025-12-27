@@ -4,7 +4,7 @@ from dikiApi import DikiApi
 
 class TestDikiApi(TestCase):
     def setUp(self):
-        self.dikiApi = DikiApi()
+        self.DikiApi = DikiApi()
 
     def test_diki_possible_spellings(self):
         test_cases = [
@@ -19,10 +19,12 @@ class TestDikiApi(TestCase):
         ]
         for phrase in test_cases:
             print(f"Testing {phrase}")
-            result = self.dikiApi.dicky_possible_spellings(phrase)
+            result = self.DikiApi.dicky_possible_spellings(phrase)
             print(result)
 
     def test_diki_audio_harness(self):
-        test_cases = ["eddying", "Be my guest.", "scooping"]
-        result = self.dikiApi.diki_audio_harness("shoving", r"trash_can")
-        print(result)
+        test_cases = ["eddying", "Be my guest.", "scooping", "overflow"]
+        for phrase in test_cases:
+            print(f"Testing {phrase}")
+            result = self.DikiApi.diki_audio_harness(phrase, f"tmp")
+            print(result)
