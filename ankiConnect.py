@@ -23,16 +23,6 @@ class AnkiConnect:
             print(f"Błąd połączenia z AnkiConnect: {e}")
             return None
 
-    def finding_cards_ids(self, deck_name=""):
-        # TODO funkcja do usunięcia/przeniesienia do innej klasy
-        if deck_name:
-            deck_name = "English::" + deck_name
-        else:
-            deck_name = "English"
-
-        note_ids = self.invoke("findNotes", query=f"deck:{deck_name}")
-        return note_ids
-
     def harness_cards_content(self, notes_ids):
         """
         Collects data about notes
@@ -43,13 +33,6 @@ class AnkiConnect:
         if notes_list:
             return notes_list
         return None
-
-    def finding_decks(self):
-        # TODO funkcja do usunięcia/przeniesienia do innej klasy, opis invoke actions jest tutaj: https://github.com/amikey/anki-connect
-        all_decks = self.invoke("deckNames")
-        if all_decks:
-            for deck in all_decks:
-                print(deck)
 
     def update_note_fields(self, note_id, fields: dict):
         """
@@ -107,17 +90,3 @@ class AnkiConnect:
         except Exception as e:
             print(f"transfer ERROR {note_id}: {e}")
             return None
-
-    def get_note_tags(self, note_id: int):
-        # TODO funkcja do usunięcia/przeniesienia do innej klasy
-        """
-        Zwraca listę etykiet (tags) dla notatki o podanym ID.
-        """
-        result = self.invoke("notesInfo", notes=[note_id])
-        if result is None:
-            return None
-
-        if not result:
-            return []
-
-        return result[0].get("tags", [])
