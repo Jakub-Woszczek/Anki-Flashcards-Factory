@@ -13,7 +13,10 @@ class DikiApi:
         pass
 
     def dicky_possible_spellings(self, phrase):
-        """Returns list of possible spellings or phrasal verbs"""
+        """
+        Jeżeli diki poprawnie rozpozna fraze, może ona mieć parę synonimów/innych zapisów, np. jak słowo eyepatch,
+        funkcja ta zbiera wszystkie podane przez diki synonimy/inne zapisy frazy.
+        """
         phrase = prepare_phrase_to_url(phrase)
         url = "https://www.diki.pl/slownik-angielskiego?q=" + phrase
         response = requests.get(url)
@@ -35,22 +38,6 @@ class DikiApi:
                 phrases.append(text)
 
         return phrases
-
-    def word_request_diki(self, word):
-        """If word is misspelled returns True"""
-        # TODO Take code from Diki package, and put it here, and polish it with edge cases
-        url = "https://www.diki.pl/slownik-angielskiego?q=" + word
-        response = requests.get(url)
-        html = response.text
-
-        soup = BeautifulSoup(html, "html.parser")
-
-        spellings = self.dicky_possible_spellings(soup)
-        for spelling in spellings:
-            if word == spelling:
-                return spellings
-
-        return "Nie znaleziono dokładnego tłumaczenia" in soup.get_text()
 
     def diki_similar_phrases(self, soup):
         suggestions_div = soup.find("div", class_="dictionarySuggestions")
