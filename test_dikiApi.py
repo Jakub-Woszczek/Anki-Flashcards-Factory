@@ -12,14 +12,14 @@ class TestDikiApi(TestCase):
             "faculty",
             "broad walk",
             "eyepatch",
-            "tossed up",
+            "toss up",
             "naiads",
             "tranquilizer dart",
             "pat",
         ]
         for phrase in test_cases:
             print(f"Testing {phrase}")
-            result = self.DikiApi.dicky_possible_spellings(phrase)
+            result = self.DikiApi.possible_spellings(phrase)
             print(result)
 
     def test_diki_audio_harness(self):
@@ -28,3 +28,19 @@ class TestDikiApi(TestCase):
             print(f"Testing {phrase}")
             result = self.DikiApi.diki_audio_harness(phrase, f"tmp")
             print(result)
+
+    def test_get_translations(self):
+        test_cases = [
+            "stanch",
+            "faculty",
+            "broad walk",
+            "eyepatch",
+            "toss up",
+            "naiad",
+            "tranquilizer dart",
+            "pat",
+        ]
+
+        for phrase in test_cases:
+            print(f"Testing {phrase}")
+            print(self.DikiApi.get_translations(phrase))

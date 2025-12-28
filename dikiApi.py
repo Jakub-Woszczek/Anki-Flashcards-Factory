@@ -10,7 +10,7 @@ class DikiApi:
         self.audio_path = os.getenv("ANKI_MEDIA_FOLDER_PATH")
         pass
 
-    def dicky_possible_spellings(self, phrase):
+    def possible_spellings(self, phrase):
         """
         Jeżeli diki poprawnie rozpozna fraze, może ona mieć parę synonimów/innych zapisów, np. jak słowo eyepatch,
         funkcja ta zbiera wszystkie podane przez diki synonimy/inne zapisy frazy.
@@ -25,7 +25,7 @@ class DikiApi:
         # Znajdź wszystkie elementy słownika
         dictionary_entities = soup.select("div.dictionaryEntity")
 
-        phrases = self.diki_similar_phrases(soup)
+        phrases = self.similar_phrases(soup)
         for entity in dictionary_entities:
             # Znajdź wszystkie <div class="hws"> -> <span class="hw">
             hw_spans = entity.select("div.hws span.hw:not(.hwLessPopularAlternative)")
@@ -37,7 +37,7 @@ class DikiApi:
 
         return phrases
 
-    def diki_similar_phrases(self, soup):
+    def similar_phrases(self, soup):
         suggestions_div = soup.find("div", class_="dictionarySuggestions")
         suggestions = []
 
@@ -80,9 +80,8 @@ class DikiApi:
                 if audio_path is not None:
                     target_dir = os.path.join(os.path.dirname(__file__), audio_path)
 
-                os.makedirs(target_dir, exist_ok=True)
-
                 assert isinstance(target_dir, str)
+                os.makedirs(target_dir, exist_ok=True)
                 filename = os.path.join(target_dir, f"{safe_phrase}.mp3")
 
                 url = (
@@ -95,6 +94,80 @@ class DikiApi:
                     return True
 
         return False
+
+    def get_translations(self, phrase):
+        """
+        Wykonuje hierarchiczną ekstrakcję tłumaczeń z serwisu Diki.pl.
+
+        Proces przetwarzania struktury DOM:
+        1. Filtrowanie encji (dictionaryEntity): Identyfikuje główne bloki
+           znaczeniowe, grupujące definicje według części mowy lub kontekstu.
+        2. Weryfikacja nagłówków (hws): Sprawdza zgodność haseł głównych
+           (headwords) z szukaną frazą, co zapobiega pobieraniu przypadkowych
+           sugestii lub słów podobnych.
+        3. Ekstrakcja list znaczeń (ol): Lokalizuje wszystkie struktury listowe
+           'foreignToNativeMeanings' wewnątrz zweryfikowanej encji, scalając
+           rozproszone bloki tłumaczeń.
+        4. Grupowanie rzędów synonimów (li): Traktuje każdy element listy 'li'
+           jako odrębny zbiór bliskich synonimów.
+        5. Selekcja słów (hw): Wyodrębnia konkretne tłumaczenia oznaczone
+           klasą 'hw', zachowując strukturę listy list, co zapobiega
+           mieszaniu się odmiennych znaczeń słowa.
+
+        Struktura HTML:
+        Strona (BeautifulSoup)
+        └── dictionaryEntity (Blok słownikowy)
+            ├── hws (Nagłówek - tu sprawdzasz dopasowanie słowa)
+            └── ol (foreignToNativeMeanings - lista znaczeń)
+                ├── li (Punkt 1: rząd synonimów)
+                │   └── span.hw (Pojedyncze słowo polskie)
+                └── li (Punkt 2: kolejny rząd synonimów)
+                    └── span.hw (Pojedyncze słowo polskie)
+
+        Args:
+            phrase (str): Szukana fraza w języku angielskim lub polskim.
+
+        Returns:
+            list[list[str]]: Zagnieżdżona lista tłumaczeń, gdzie każda podlista
+            reprezentuje odrębny kontekst znaczeniowy (synonimy).
+        """
+
+        result = requests.get(f"https://www.diki.pl/slownik-angielskiego?q={phrase}")
+        soup = BeautifulSoup(result.text, "html.parser")
+
+        entities = soup.find_all("div", class_="dictionaryEntity")
+        all_meanings = []
+
+        for entity in entities:
+
+            header_section = entity.find("div", class_="hws")
+            if not header_section:
+                continue
+
+            # Słowa kluczowe z nagłówka (może być ich kilka np. dla staunch i stanch)
+            header_words = [
+                hw.get_text(strip=True).strip().lower()
+                for hw in header_section.find_all("span", class_="hw")
+            ]
+
+            if phrase not in header_words:
+                continue
+
+            meanings_list = entity.find_all(
+                "ol", class_="foreignToNativeMeanings"
+            )  # Szukam wszystkich znaczeń
+            for m_list in meanings_list:
+                for li in m_list.find_all("li", recursive=False):
+
+                    current_row_meanings = [
+                        span.get_text(strip=True)
+                        for span in li.find_all("span", class_="hw", recursive=False)
+                    ]
+
+                    if current_row_meanings:
+                        all_meanings.append(current_row_meanings)
+
+        return all_meanings
 
 
 def prepare_phrase_to_url(phase):

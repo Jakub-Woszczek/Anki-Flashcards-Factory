@@ -12,7 +12,7 @@ class FlashcardApp:
         self.tree_frame = None
         self.gemini_bot = GeminiBot()
         self.words_to_add = []
-        self.my_diki_api = DikiApi()
+        self.diki_api = DikiApi()
         self.anki_api = AnkiConnect()
         self.notes_db = NotesDatabase()
         self.deck = deck
@@ -105,6 +105,7 @@ class FlashcardApp:
         self.error_val.set(0)
         self.gemini_diff_val.set(0)
         self.to_edit_val.set(0)
+        return None
 
     def load_words(self, path):
         with open(path, "r") as f:
@@ -114,7 +115,7 @@ class FlashcardApp:
     def diki_translations_harness(self, note: str):
 
         # Turned out to be an easier way hehe
-        meanings = self.diki_api.translation(note)  # TODO: there should be my_diki_api
+        meanings = self.diki_api.get_translations(note)
         if not meanings:
             print("ERROR - no translation")
         return meanings
@@ -173,7 +174,7 @@ class FlashcardApp:
         if self.to_edit_val.get() == 1:
             tags.append("TO_EDIT")
 
-        audio_result = self.my_diki_api.diki_audio_harness(self.current_word)
+        audio_result = self.diki_api.diki_audio_harness(self.current_word)
         if not audio_result:
             print("ERROR - Audio ", self.current_word)
             audio_string = ""
