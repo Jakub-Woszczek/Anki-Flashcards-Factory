@@ -127,7 +127,7 @@ class RawNotesEditor:
             for line in f_notes:
                 line = line.strip()
                 if line not in inner_redundant:
-                    if not self.db.is_redundant(line):
+                    if not self.db.is_in_db(line):
                         f_clean_notes.write(line + "\n")
                         inner_redundant.append(line)
                     else:

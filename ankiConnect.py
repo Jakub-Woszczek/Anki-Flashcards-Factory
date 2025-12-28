@@ -9,6 +9,7 @@ class AnkiConnect:
         self.MISSPELL_LABEL = "MISSPELL"
         self.images_folder_path = os.getenv("ANKI_MEDIA_FOLDER_PATH")
         self.anki_port = os.getenv("ANKI_PORT")
+        self.anki_base_deck_path = os.getenv("ANKI_BASE_DECK_PATH")
 
     def invoke(self, action, **params):
         """Wyślij żądanie do AnkiConnect i zwróć wynik."""
@@ -90,3 +91,26 @@ class AnkiConnect:
         except Exception as e:
             print(f"transfer ERROR {note_id}: {e}")
             return None
+
+    def get_subdecks(self):
+        """
+        Returns list of subdecks of supreme deck (ANKI_BASE_DECK_PATH).
+        """
+        deck_names = [
+            d
+            for d in self.invoke("deckNames")
+            if d.startswith(
+                self.anki_base_deck_path + "::"
+            )  # Checks if is subdeck of supreme deck
+            and any(char.isdigit() for char in d)
+            and "C2" not in d  # I have in my supreme deck some additional decks that I
+        ]  # want to exclude, and they don't have digits in their names
+
+        return deck_names
+
+    def notes_ids_from_deck(self, deck_name):
+        query = f"deck:{deck_name}"
+        r = self.invoke("findNotes", query=query)
+        if r is None:
+            raise ValueError(f"Nie znaleziono notatek w talii {deck_name}")
+        return r

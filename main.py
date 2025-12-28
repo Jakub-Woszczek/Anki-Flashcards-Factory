@@ -1,9 +1,41 @@
 import argparse
+from dotenv import load_dotenv
+from allNotesDb import NotesDatabase
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--app", action="store_true", help="Run the main app")
+    parser.add_argument(
+        "--db", action="store_true", help="Run database redundancy check"
+    )
+
+    parser.add_argument("-i", action="store_true", help="Run database inspection")
+    parser.add_argument(
+        "-dm",
+        "--delete_multiple",
+        action="store_true",
+        help="Run database function to delete multiple words",
+    )
+    parser.add_argument("-d", "--to_delete", help="Delete word from local db")
+    parser.add_argument(
+        "-u",
+        "--update_db",
+        action="store_true",
+        help="Adds words to local db from anki that are not in local db.",
+    )
+
     args = parser.parse_args()
+    load_dotenv()
 
     if args.app:
         pass
+    elif args.db:
+        db = NotesDatabase()
+        if args.i:
+            db.db_inspection()
+        elif args.to_delete:
+            db.delete_word(args.to_delete)
+        elif args.delete_multiple:
+            db.delete_multiple_words()
+        elif args.update_db:
+            db.update_local_db()
