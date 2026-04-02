@@ -16,6 +16,9 @@ class TestDikiApi(TestCase):
             "naiads",
             "tranquilizer dart",
             "pat",
+            "versality",
+            "take",
+            "taxi",
         ]
         for phrase in test_cases:
             print(f"Testing {phrase}")

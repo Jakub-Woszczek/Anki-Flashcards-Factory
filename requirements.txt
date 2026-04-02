@@ -1,0 +1,6 @@
+dotenv~=0.9.9
+python-dotenv~=1.2.2
+requests~=2.33.1
+bs4~=0.0.2
+beautifulsoup4~=4.14.3
+rich~=14.3.3

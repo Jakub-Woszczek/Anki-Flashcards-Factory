@@ -13,6 +13,7 @@ class RawNotesEditor:
         self.db = NotesDatabase()
 
     def strip_from_empty_lines(self, path):
+        # USELESS
         file_name = os.path.basename(path)
         folder = os.path.dirname(path)
         name, ext = os.path.splitext(file_name)
@@ -68,7 +69,7 @@ class RawNotesEditor:
 
         return phrases
 
-    def check_correctness(self, file):
+    def prepare_raw_notes(self, file):
         path = os.path.join(self.dir, file)
         name, ext = os.path.splitext(file)
         name_new = "input_correct" + ext

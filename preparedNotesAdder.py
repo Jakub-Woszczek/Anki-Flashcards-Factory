@@ -7,7 +7,8 @@ from allNotesDb import NotesDatabase
 
 
 class FlashcardApp:
-    def __init__(self, path, deck):
+    def __init__(self, path, deck, write_to_db=True):
+        self.write_to_db = write_to_db
         self.translation_vars = []
         self.tree_frame = None
         self.gemini_bot = GeminiBot()
@@ -190,8 +191,9 @@ class FlashcardApp:
             print("ERROR - Nie dodano anki")
         else:
             print("✅ Dodano: ", self.current_word)
-            if not self.notes_db.add_word(new_note_id, self.current_word):
-                print("ERROR - Redundant in DB")
+            if self.write_to_db:
+                if not self.notes_db.add_word(new_note_id, self.current_word):
+                    print("ERROR - Redundant in DB")
 
         self.reload_note()
 

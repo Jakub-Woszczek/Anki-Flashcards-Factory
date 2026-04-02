@@ -294,3 +294,4 @@ progress_notes.txt
 db/
 prepared_notes/
 raw_notes/
+.ankiFact/

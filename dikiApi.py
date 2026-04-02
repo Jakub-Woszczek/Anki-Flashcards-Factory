@@ -10,10 +10,12 @@ class DikiApi:
         self.audio_path = os.getenv("ANKI_MEDIA_FOLDER_PATH")
         pass
 
-    def possible_spellings(self, phrase):
+    def possible_spellings(self, phrase) -> set:
         """
         Jeżeli diki poprawnie rozpozna fraze, może ona mieć parę synonimów/innych zapisów, np. jak słowo eyepatch,
         funkcja ta zbiera wszystkie podane przez diki synonimy/inne zapisy frazy.
+
+        WARNING: Nie działa dla słów o takim samym zapisie po angielsku i po polsku (tbh nie jest ich dużo)
         """
         phrase = prepare_phrase_to_url(phrase)
         url = "https://www.diki.pl/slownik-angielskiego?q=" + phrase
@@ -33,19 +35,23 @@ class DikiApi:
                 text = hw_span.get_text()
                 text = text.replace("\xa0", " ")
                 text = " ".join(text.split())
-                phrases.append(text)
+                phrases.add(text)
 
         return phrases
 
     def similar_phrases(self, soup):
+        """
+        Zwraca listę słówek podpowiedzi diki, gdzie słówko nie występuje w diki, lecz są podobne np.
+        'versality' -> [versatility, verticality]
+        """
         suggestions_div = soup.find("div", class_="dictionarySuggestions")
-        suggestions = []
+        suggestions = set()
 
         if suggestions_div:
             # Szukamy wszystkich linków <a> w tym divie
             links = suggestions_div.find_all("a")
             for link in links:
-                suggestions.append(link.get_text())
+                suggestions.add((link.get_text()))
 
         return suggestions
 

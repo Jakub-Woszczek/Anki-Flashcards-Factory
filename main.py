@@ -1,6 +1,8 @@
 import argparse
+import os
 from dotenv import load_dotenv
 from allNotesDb import NotesDatabase
+from preparedNotesAdder import FlashcardApp
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -23,12 +25,27 @@ if __name__ == "__main__":
         action="store_true",
         help="Adds words to local db from anki that are not in local db.",
     )
+    parser.add_argument(
+        "-t",
+        "--run_functional_test",
+        action="store_true",
+        help="Adds words to local db from anki that are not in local db.",
+    )
 
     args = parser.parse_args()
     load_dotenv()
 
     if args.app:
-        pass
+        if args.run_functional_test:
+            app = FlashcardApp(
+                os.getenv("TEST_WORDS_PATH"),
+                os.getenv("ANKI_DECK_PATH_TEST"),
+                write_to_db=False,
+            )
+        else:
+            app = FlashcardApp(
+                os.getenv("PREPARED_WORDS_PATH"), os.getenv("ANKI_DECK_PATH")
+            )
     elif args.db:
         db = NotesDatabase()
         if args.i:
