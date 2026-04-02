@@ -11,7 +11,7 @@ class TestPreparedNotesAdder(TestCase):
 
     def test_diki_audio_harness(self):
         word = "thank you"
-        autio_path = r"db"
+        autio_path = r"../db"
         prepared_word = "".join(letter if letter != " " else "_" for letter in word)
         url = f"https://www.diki.pl/images-common/en/mp3/{prepared_word}.mp3"
 

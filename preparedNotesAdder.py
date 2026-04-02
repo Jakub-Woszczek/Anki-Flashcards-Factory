@@ -1,8 +1,8 @@
 import tkinter as tk
 from tkinter import ttk
-from ankiConnect import AnkiConnect
-from dikiApi import DikiApi
-from geminiAPI import GeminiBot
+from external_APIs.ankiConnect import AnkiConnect
+from external_APIs.dikiApi import DikiApi
+from external_APIs.geminiAPI import GeminiBot
 from allNotesDb import NotesDatabase
 
 

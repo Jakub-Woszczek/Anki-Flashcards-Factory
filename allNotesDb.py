@@ -2,7 +2,7 @@ import json
 import os
 from pathlib import Path
 
-from ankiConnect import AnkiConnect
+from external_APIs.ankiConnect import AnkiConnect
 
 
 class NotesDatabase:

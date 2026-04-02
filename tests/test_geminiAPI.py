@@ -1,5 +1,5 @@
 from unittest import TestCase
-from geminiAPI import GeminiBot
+from external_APIs.geminiAPI import GeminiBot
 
 
 class TestGeminBot(TestCase):

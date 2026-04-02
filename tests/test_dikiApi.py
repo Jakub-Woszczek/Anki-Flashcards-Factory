@@ -1,5 +1,5 @@
 from unittest import TestCase
-from dikiApi import DikiApi
+from external_APIs.dikiApi import DikiApi
 
 
 class TestDikiApi(TestCase):

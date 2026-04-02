@@ -1,7 +1,7 @@
 import requests
 from bs4 import BeautifulSoup
 from allNotesDb import NotesDatabase
-from ankiConnect import AnkiConnect
+from external_APIs.ankiConnect import AnkiConnect
 import os
 
 

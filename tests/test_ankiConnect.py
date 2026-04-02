@@ -1,7 +1,7 @@
 from unittest import TestCase
 from dotenv import load_dotenv
 
-from ankiConnect import AnkiConnect
+from external_APIs.ankiConnect import AnkiConnect
 
 
 class TestAnkiConnect(TestCase):
