@@ -61,7 +61,7 @@ Utwórz plik `.env` w głównym katalogu projektu i uzupełnij poniższe wartoś
 ANKI_MEDIA_FOLDER_PATH='/Users/{twoja_nazwa_użytkownika}/Library/Application Support/Anki2/Użytkownik 1/collection.media'
 
 # Port AnkiConnect (domyślnie 8765)
-ANKI_PORT=http://127.0.0.1:8765
+ANKI_URL=http://127.0.0.1:8765
 
 # Klucz API Gemini – uzyskaj na: https://aistudio.google.com/app/apikey
 GEMINI_API_KEY=
@@ -85,9 +85,9 @@ TEST_WORDS_PATH=test_words
 ---
 
 ### 3. Uruchomienie
-#### 3.1 Edycja poprawnych słówek
+#### 3.1 Preprocessing słówek
 ```bash
-pyton main.py --app -e
+python main.py --app -e
 ```
 
 #### 3.2 Główna aplikacja: tworzenie fiszek
@@ -96,7 +96,7 @@ python main.py --app
 ```
 Uruchamia główną aplikację
 
-➡️ Zaimplementowałem zapis do lokalnej bazy danych (by sprawdzać czy jakieś słówka się nie powtarzają), jej ewentualne errory zignoruj.
+➡️ Aplikacja prowadzi lokalną bazę danych, która zapobiega duplikatom fiszek.
 
 
 ## ⚠️ Wymagania
@@ -118,7 +118,7 @@ anki-flashcards-factory/
 │   ├── input_correct.txt    # Przetworzona lista słówek
 │   └── errors.txt          # Słowa nieznalezione w diki
 ├── prepared_notes/
-│   └── diki_prepared.txt   # Gotowe słowa do importu
+│   └── diki_prepared.txt   # Gotowe słowa tworzenia fiszek
 ├── test_words/             # Dane testowe
 └── .env                    # Konfiguracja (utwórz samodzielnie)
 ```
@@ -132,4 +132,5 @@ Poniższe zmienne środowiskowe nie są już używane i można je pominąć:
 ```env
 DATABASE_PATH=db/flashcards_db.json  # wycofane – użyte do allNotesDb
 ANKI_BASE_DECK_PATH=English          # wycofane
+DIKI_MISSING_WORDS_PATH=raw_notes/diki_missing.txt
 ```
