@@ -90,6 +90,28 @@ TEST_WORDS_PATH=test_words
 python main.py --app -e
 ```
 
+<details>
+<summary>Przykład przebiegu preprocessingu</summary>
+
+```bash
+~/sidePrjs/ankiFac main* ⇡ 8s                                                                                                                          15:38:19
+.ankiFact ❯ python main.py --app -e
+CHECK rookie mistake
+Słowo: rookie mistake ✔
+CHECK commerce
+Słowo: commerce ✔
+CHECK cite
+Słowo: cite ✔
+CHECK intrinsicaly
+Możliwe poprawne wersje [intrinsicaly]:
+1. intrinsically
+Wybierz numer poprawnej wersji (0 = pomiń): 1
+→ Zapisano: intrinsically
+CHECK on it's own
+→ Słówko nie istnieje w diki ani nie ma podobnych
+```
+</details>
+
 #### 3.2 Główna aplikacja: tworzenie fiszek
 ```bash
 python main.py --app

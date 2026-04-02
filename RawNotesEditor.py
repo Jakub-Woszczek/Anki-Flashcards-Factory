@@ -57,9 +57,15 @@ class RawNotesEditor:
                 soup = BeautifulSoup(html, "html.parser")
                 possible_spellings = self.diki_possible_spellings(soup)
                 print(f"CHECK {line}")
-                if line in possible_spellings:
-                    print(f"Słowo: {line} ✔")
-                    f_correct.write(line + "\n")
+                for h2 in soup.select("h2.dictionarySectionHeader"):
+                    text = " ".join(h2.get_text().split())
+                    if (
+                        f"po polsku — Słownik angielsko-polski" in text
+                        and "podobne do" not in text
+                    ):
+                        print(f"Słowo: {line} ✔")
+                        f_correct.write(line + "\n")
+                        break
                 else:
                     if possible_spellings:
                         print(f"Możliwe poprawne wersje [{line}]:")
