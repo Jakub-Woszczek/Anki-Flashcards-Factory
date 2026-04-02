@@ -292,6 +292,7 @@ ankiFactory/
 tmp/
 progress_notes.txt
 db/
-prepared_notes/
-raw_notes/
+#prepared_notes/
+raw_notes/errors.txt
+raw_notes/input_correct.txt
 .ankiFact/

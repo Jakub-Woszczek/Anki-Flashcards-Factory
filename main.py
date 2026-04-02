@@ -1,6 +1,8 @@
 import argparse
 import os
 from dotenv import load_dotenv
+
+from RawNotesEditor import RawNotesEditor
 from allNotesDb import NotesDatabase
 from preparedNotesAdder import FlashcardApp
 
@@ -29,7 +31,13 @@ if __name__ == "__main__":
         "-t",
         "--run_functional_test",
         action="store_true",
-        help="Adds words to local db from anki that are not in local db.",
+        help="Runs functional tests.",
+    )
+    parser.add_argument(
+        "-e",
+        "--run_raw_notes_editor",
+        action="store_true",
+        help="Runs raw notes editor.",
     )
 
     args = parser.parse_args()
@@ -42,6 +50,9 @@ if __name__ == "__main__":
                 os.getenv("ANKI_DECK_PATH_TEST"),
                 write_to_db=False,
             )
+        elif args.run_raw_notes_editor:
+            raw_notes_editor = RawNotesEditor()
+            raw_notes_editor.prepare_raw_notes(os.getenv("PREPROCESSED_WORDS_FILE"))
         else:
             app = FlashcardApp(
                 os.getenv("PREPARED_WORDS_PATH"), os.getenv("ANKI_DECK_PATH")
