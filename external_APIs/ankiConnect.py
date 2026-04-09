@@ -23,7 +23,8 @@ class AnkiConnect:
             data = response.json()
 
             if data.get("error") is not None:
-                print(f"AnkiConnect error: {data['error']}")
+                print(f"AnkiConnect error [{action}]: {data['error']}")
+                print(f"params: {params}")
                 return None
             return data.get("result")
 

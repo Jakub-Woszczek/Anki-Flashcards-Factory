@@ -37,7 +37,12 @@ Niektóre słowa mogą być zapisane w Twoich notatkach inaczej niż występują
 
 ## Jak używać
 
-### 1. Środowisko wirtualne
+### 1. Stwórz środowisko wirtualne
+```bash
+python3 -m venv venv # Drugi arg to ścieżka
+```
+
+### 1.1 Uruchom środowisko wirtualne
 
 **macOS / Linux:**
 ```bash
@@ -55,6 +60,17 @@ source .ankiFact/bin/activate
 ```bash
 pip install -r requirements.txt
 ```
+
+### 2.1 Pobierz tkinter (jeżeli nie masz)
+
+<details>
+<summary>Jak sprawdzić czy masz tkinter (Windows instaluje domyślnie przeważnie)</summary>
+
+```bash
+python -m tkinter # Powinno małe okienko wyskoczyć
+```
+
+</details>
 
 ### 3. Skonfiguruj zmienne środowiskowe
 
@@ -125,6 +141,9 @@ Uruchamia główną aplikację
 
 ➡️ Aplikacja prowadzi lokalną bazę danych, która zapobiega duplikatom fiszek.
 
+## ❗️Uwagi
+Należy przygotować w samej aplikacji Anki/zmienić w kodzie - to jak się nazywają pola fiszki, jak się nazywa model fiszki.
+Kod do tego znajduje się w funkcji `add_flashcard`, który wywołuje RPC `add_flashcard`.
 
 ## ⚠️ Wymagania
 
@@ -132,6 +151,7 @@ Uruchamia główną aplikację
 - Python 3.x ze środowiskiem wirtualnym
 - Klucz API Gemini (opcjonalnie, do generowania definicji)
 - (przydatne) znajomość Pythona
+- znajomość Anek (od technicznej strony: pola/typy fiszek/...)
 ---
 
 ## Inne
