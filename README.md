@@ -51,11 +51,16 @@ source .ankiFact/bin/activate
 
 ---
 
-### 2. Skonfiguruj zmienne środowiskowe
+### 2. Pobierz zależności
+```bash
+pip install -r requirements.txt
+```
+
+### 3. Skonfiguruj zmienne środowiskowe
 
 Utwórz plik `.env` w głównym katalogu projektu i uzupełnij poniższe wartości:
 
-```env
+```bash
 # Ścieżka do folderu mediów Anki
 # macOS (domyślna):
 ANKI_MEDIA_FOLDER_PATH='/Users/{twoja_nazwa_użytkownika}/Library/Application Support/Anki2/Użytkownik 1/collection.media'
@@ -81,7 +86,7 @@ ANKI_DECK_PATH_TEST=English::test
 TEST_WORDS_PATH=test_words
 ```
 - ❗️ Musisz sprawdzić ścieżkę do folderu z mediami aplikacji Anki
-- ❗️ Musisz dodać swój API key gemini
+- ❗️ Musisz dodać swój API key gemini (jeżeli chcesz korzystać z AI assistant — niewymagane do działania głównej logiki aplikacji)
 ---
 
 ### 3. Uruchomienie
@@ -126,7 +131,7 @@ Uruchamia główną aplikację
 - Uruchomione **Anki** z zainstalowanym pluginem [AnkiConnect](https://ankiweb.net/shared/info/2055492159)
 - Python 3.x ze środowiskiem wirtualnym
 - Klucz API Gemini (opcjonalnie, do generowania definicji)
-
+- (przydatne) znajomość Pythona
 ---
 
 ## Inne
