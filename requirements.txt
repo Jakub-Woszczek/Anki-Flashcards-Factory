@@ -4,3 +4,4 @@ requests~=2.33.1
 bs4~=0.0.2
 beautifulsoup4~=4.14.3
 rich~=14.3.3
+google-genai~=1.70.0
