@@ -39,6 +39,12 @@ if __name__ == "__main__":
         action="store_true",
         help="Runs raw notes editor.",
     )
+    parser.add_argument(
+        "-db",
+        "--auto_save_to_db",
+        action="store_true",
+        help="Automatically saves notes to local db while app is running.",
+    )
 
     args = parser.parse_args()
     load_dotenv()
@@ -54,8 +60,11 @@ if __name__ == "__main__":
             raw_notes_editor = RawNotesEditor()
             raw_notes_editor.prepare_raw_notes(os.getenv("PREPROCESSED_WORDS_FILE"))
         else:
+            db_active = args.auto_save_to_db
             app = FlashcardApp(
-                os.getenv("PREPARED_WORDS_PATH"), os.getenv("ANKI_DECK_PATH")
+                os.getenv("PREPARED_WORDS_PATH"),
+                os.getenv("ANKI_DECK_PATH"),
+                write_to_db=db_active,
             )
     elif args.db:
         db = NotesDatabase()

@@ -7,7 +7,7 @@ from allNotesDb import NotesDatabase
 
 
 class FlashcardApp:
-    def __init__(self, path, deck, write_to_db=True):
+    def __init__(self, path, deck, write_to_db=False):
         self.write_to_db = write_to_db
         self.translation_vars = []
         self.tree_frame = None
@@ -15,8 +15,10 @@ class FlashcardApp:
         self.words_to_add = []
         self.diki_api = DikiApi()
         self.anki_api = AnkiConnect()
-        self.notes_db = NotesDatabase()
+        self.notes_db = None
         self.deck = deck
+        if write_to_db:
+            self.notes_db = NotesDatabase()
 
         self.root = tk.Tk()
         self.root.title("Konstruktor fiszek")
