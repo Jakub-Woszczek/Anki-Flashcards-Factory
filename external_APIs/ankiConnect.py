@@ -19,7 +19,14 @@ class AnkiConnect:
                 json={"action": action, "version": 6, "params": params},
             )
             response.raise_for_status()  # Sprawdzenie, czy nie ma błędów HTTP
-            return response.json()["result"]
+
+            data = response.json()
+
+            if data.get("error") is not None:
+                print(f"AnkiConnect error: {data['error']}")
+                return None
+            return data.get("result")
+
         except requests.exceptions.RequestException as e:
             print(f"Błąd połączenia z AnkiConnect: {e}")
             return None

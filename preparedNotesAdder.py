@@ -190,7 +190,7 @@ class FlashcardApp:
         )
 
         if new_note_id is None:
-            print("ERROR - Nie dodano anki")
+            print("ERROR - Nie dodano anki (taka fiszka może już istnieć)")
         else:
             print("✅ Dodano: ", self.current_word)
             if self.write_to_db:
