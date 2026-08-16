@@ -5,10 +5,14 @@ import requests
 from bs4 import BeautifulSoup
 
 
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+}
+
+
 class DikiApi:
     def __init__(self):
         self.audio_path = os.getenv("ANKI_MEDIA_FOLDER_PATH")
-        pass
 
     def possible_spellings(self, phrase) -> set:
         """
@@ -19,7 +23,7 @@ class DikiApi:
         """
         phrase = prepare_phrase_to_url(phrase)
         url = "https://www.diki.pl/slownik-angielskiego?q=" + phrase
-        response = requests.get(url)
+        response = requests.get(url, headers=HEADERS)
         html = response.text
 
         soup = BeautifulSoup(html, "html.parser")
@@ -93,7 +97,7 @@ class DikiApi:
                 url = (
                     f"https://www.diki.pl/images-common/{lang}/mp3/{word}{version}.mp3"
                 )
-                r = requests.get(url)
+                r = requests.get(url, headers=HEADERS)
                 if r.ok:
                     with open(filename, "wb") as f:
                         f.write(r.content)
@@ -138,7 +142,7 @@ class DikiApi:
             reprezentuje odrębny kontekst znaczeniowy (synonimy).
         """
 
-        result = requests.get(f"https://www.diki.pl/slownik-angielskiego?q={phrase}")
+        result = requests.get(f"https://www.diki.pl/slownik-angielskiego?q={phrase}", headers=HEADERS)
         soup = BeautifulSoup(result.text, "html.parser")
 
         entities = soup.find_all("div", class_="dictionaryEntity")
