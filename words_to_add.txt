@@ -1056,3 +1056,5 @@ concave
 slant
 cape
 
+ordinal
+merit
