@@ -155,8 +155,12 @@ class DikiApi:
                 continue
 
             # Słowa kluczowe z nagłówka (może być ich kilka np. dla staunch i stanch)
+            # Uwaga: niektóre hasła zawierają zagnieżdżone <span class="stopword">
+            # (np. "whatever floats <span class="stopword">one's</span> boat"),
+            # więc trzeba wymusić separator, inaczej słowa się sklejają
+            # (np. "whatever floatsone'sboat").
             header_words = [
-                hw.get_text(strip=True).strip().lower()
+                " ".join(hw.get_text(separator=" ", strip=True).split()).lower()
                 for hw in header_section.find_all("span", class_="hw")
             ]
 
@@ -170,7 +174,7 @@ class DikiApi:
                 for li in m_list.find_all("li", recursive=False):
 
                     current_row_meanings = [
-                        span.get_text(strip=True)
+                        " ".join(span.get_text(separator=" ", strip=True).split())
                         for span in li.find_all("span", class_="hw", recursive=False)
                     ]
 
