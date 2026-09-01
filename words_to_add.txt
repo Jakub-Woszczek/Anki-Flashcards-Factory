@@ -1069,3 +1069,7 @@ assignee
 restock
 moat
 terrestrial
+exempt
+lyme disease
+wildering
+converge
