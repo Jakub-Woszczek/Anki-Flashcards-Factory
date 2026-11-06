@@ -8,7 +8,7 @@ class GeminiBot:
     def __init__(self):
         self.api_key = os.getenv("GEMINI_API_KEY")
         if self.api_key:
-            self.client = genai.Client()
+            self.client = genai.Client(api_key=self.api_key)
         else:
             self.client = None  # No client if key missing
 
@@ -29,10 +29,25 @@ class GeminiBot:
         except Exception as e:
             return f"error: {str(e)}"
 
-    def get_word_translation(self, word):
+    @staticmethod
+    def word_translation_prompt(word: str, diki_translations: list[list[str]]) -> str:
+        diki_context = "\n".join(
+            f"{index}. {', '.join(group)}"
+            for index, group in enumerate(diki_translations, start=1)
+            if group
+        )
+        if not diki_context:
+            return f'Przetłumacz angielskie słowo "{word}" na polski.'
+        return (
+            f'Przetłumacz angielskie słowo "{word}" na polski.\n\n'
+            "Diki podaje następujące tłumaczenia, pogrupowane według znaczeń:\n"
+            f"{diki_context}"
+        )
+
+    def get_word_translation(self, word: str, diki_translations: list[list[str]]):
         print(f"Tłumaczenie słowa {word} ...")
 
-        description = self.get_answer(f"Przetłumacz słowo {word} na język polski")
+        description = self.get_answer(self.word_translation_prompt(word, diki_translations))
         if description == "no api key provided":
             print(description)
             return description
