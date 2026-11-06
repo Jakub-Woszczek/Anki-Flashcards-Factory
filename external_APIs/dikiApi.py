@@ -1,5 +1,6 @@
 import os
 import re
+from typing import TypedDict
 
 import requests
 from bs4 import BeautifulSoup
@@ -9,6 +10,16 @@ HEADERS = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 }
 REQUEST_TIMEOUT_SECONDS = 15
+
+
+class SentenceExample(TypedDict):
+    english: str
+    polish: str
+
+
+class Meaning(TypedDict):
+    translations: list[str]
+    examples: list[SentenceExample]
 
 
 class DikiApi:
@@ -168,6 +179,14 @@ class DikiApi:
             reprezentuje odrębny kontekst znaczeniowy (synonimy).
         """
 
+        return [meaning["translations"] for meaning in self.get_meanings(phrase)]
+
+    def get_meanings(self, phrase: str) -> list[Meaning]:
+        """Fetch exact-match meanings with their attached English/Polish examples.
+
+        The separate, automatically generated additional-sentences section is
+        excluded. Each example belongs to its containing meaning group.
+        """
         try:
             result = requests.get(
                 f"https://www.diki.pl/slownik-angielskiego?q={prepare_phrase_to_url(phrase)}",
@@ -178,11 +197,16 @@ class DikiApi:
         except requests.RequestException:
             return []
 
-        return parse_translations(result.text, phrase)
+        return parse_meanings(result.text, phrase)
 
 
 def parse_translations(html: str, phrase: str) -> list[list[str]]:
-    """Parse a saved or fetched Diki document without performing I/O."""
+    """Return translation groups only, preserving the app's existing contract."""
+    return [meaning["translations"] for meaning in parse_meanings(html, phrase)]
+
+
+def parse_meanings(html: str, phrase: str) -> list[Meaning]:
+    """Parse meanings and attached bilingual examples without performing I/O."""
     normalized_phrase = " ".join(phrase.lower().split())
     soup = BeautifulSoup(html, "html.parser")
 
@@ -229,7 +253,29 @@ def parse_translations(html: str, phrase: str) -> list[list[str]]:
                     )
 
                 if current_row_meanings:
-                    all_meanings.append(current_row_meanings)
+                    examples = []
+                    for example in li.select(".exampleSentence"):
+                        translation = example.find(class_="exampleSentenceTranslation")
+                        polish = ""
+                        if translation is not None:
+                            polish = " ".join(translation.get_text(" ", strip=True).split())
+                            if polish.startswith("(") and polish.endswith(")"):
+                                polish = polish[1:-1].strip()
+
+                        # Remove the translation and controls before reading the
+                        # English sentence, preserving any inline sentence markup.
+                        for extra in example.select(
+                            ".exampleSentenceTranslation, .recordingsAndTranscriptions, "
+                            ".repetitionAddOrRemoveIconAnchor"
+                        ):
+                            extra.decompose()
+                        english = " ".join(example.get_text(" ", strip=True).split())
+                        if english:
+                            examples.append({"english": english, "polish": polish})
+                    all_meanings.append({
+                        "translations": current_row_meanings,
+                        "examples": examples,
+                    })
 
     return all_meanings
 
