@@ -32,7 +32,7 @@ def legacy_index_path() -> Path | None:
 
 
 def configured_words_to_add_path() -> Path:
-    return ROOT_DIR / "words_to_add.txt"
+    return ROOT_DIR / "words_to_add" / "words_to_add.txt"
 
 
 def configured_prepared_words_path() -> Path | None:

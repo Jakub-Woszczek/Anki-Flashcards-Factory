@@ -9,7 +9,7 @@ from external_APIs.dikiApi import DikiApi
 from rich.console import Console
 from rich.rule import Rule
 
-WORDS_FILE = os.path.join(os.path.dirname(__file__), "..", "words_to_add.txt")
+WORDS_FILE = os.path.join(os.path.dirname(__file__), "..", "words_to_add", "words_to_add.txt")
 
 console = Console()
 
