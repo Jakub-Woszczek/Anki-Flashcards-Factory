@@ -1,0 +1,32 @@
+[
+  {
+    "word": "whatever floats one's boat",
+    "fixture": "whatever-floats-ones-boat.html",
+    "expectedTranslations": [["co komu pasuje", "co komu odpowiada"]],
+    "expectedSuggestions": []
+  },
+  {
+    "word": "versality",
+    "fixture": "versality.html",
+    "expectedTranslations": [],
+    "expectedSuggestions": ["versatility", "verticality"]
+  },
+  {
+    "word": "eyepatch",
+    "fixture": "eyepatch.html",
+    "expectedTranslations": [["opaska na oko"], ["przepaska na oko"]],
+    "expectedSuggestions": []
+  },
+  {
+    "word": "blow me",
+    "fixture": "blow-me.html",
+    "expectedTranslations": [["pieprz się"]],
+    "expectedSuggestions": []
+  },
+  {
+    "word": "flimsy",
+    "fixture": "flimsy.html",
+    "expectedTranslations": [["cienki", "lekki (o ubraniach)"], ["kruchy", "nietrwały"], ["marny", "nietrwały (o umowie, porozumieniu)"], ["marny", "słaby (o argumentacji, wyjaśnieniu, wymówce)"], ["papierek", "banknot"]],
+    "expectedSuggestions": []
+  }
+]

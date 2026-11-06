@@ -8,11 +8,14 @@ from bs4 import BeautifulSoup
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 }
+REQUEST_TIMEOUT_SECONDS = 15
 
 
 class DikiApi:
     def __init__(self):
         self.audio_path = os.getenv("ANKI_MEDIA_FOLDER_PATH")
+        self.last_error = None
+        self.last_audio_path = None
 
     def possible_spellings(self, phrase) -> set:
         """
@@ -23,10 +26,16 @@ class DikiApi:
         """
         phrase = prepare_phrase_to_url(phrase)
         url = "https://www.diki.pl/slownik-angielskiego?q=" + phrase
-        response = requests.get(url, headers=HEADERS)
-        html = response.text
+        try:
+            response = requests.get(url, headers=HEADERS, timeout=REQUEST_TIMEOUT_SECONDS)
+            # Diki serves its "Czy chodziło ci o" suggestions on a 404 page.
+            # The response still contains valid dictionarySuggestions markup.
+            if response.status_code != 404:
+                response.raise_for_status()
+        except requests.RequestException:
+            return set()
 
-        soup = BeautifulSoup(html, "html.parser")
+        soup = BeautifulSoup(response.text, "html.parser")
 
         # Znajdź wszystkie elementy słownika
         dictionary_entities = soup.select("div.dictionaryEntity")
@@ -67,6 +76,8 @@ class DikiApi:
         Sprawdza wersje url, czasami słowo występuje tylko w jednym wariancie językowym, en/ame oraz
         w wariancie dla formy słowa (rzeczownik/czasownik).
         """
+        self.last_error = None
+        self.last_audio_path = None
         word = phrase.replace(" ", "_")
         word = re.sub(
             r"[^\w_-]", "", word
@@ -77,32 +88,47 @@ class DikiApi:
         safe_phrase = re.sub(illegal_chars, "", phrase)
 
         langs = ["en", "en-ame"]
-        version = [
+        versions = [
             "",
             "-v",
             "-n",
         ]  # Refers to the version of word like noun of verb (sometimes occurs)
 
         for lang in langs:
-            for version in version:
+            for version in versions:
 
                 target_dir = self.audio_path
                 if audio_path is not None:
                     target_dir = os.path.join(os.path.dirname(__file__), audio_path)
 
-                assert isinstance(target_dir, str)
-                os.makedirs(target_dir, exist_ok=True)
+                if not isinstance(target_dir, str) or not target_dir:
+                    self.last_error = "ANKI_MEDIA_FOLDER_PATH is not configured"
+                    return False
+                try:
+                    os.makedirs(target_dir, exist_ok=True)
+                except OSError as error:
+                    self.last_error = f"Anki media folder is unavailable: {error}"
+                    return False
                 filename = os.path.join(target_dir, f"{safe_phrase}.mp3")
 
                 url = (
                     f"https://www.diki.pl/images-common/{lang}/mp3/{word}{version}.mp3"
                 )
-                r = requests.get(url, headers=HEADERS)
+                try:
+                    r = requests.get(url, headers=HEADERS, timeout=REQUEST_TIMEOUT_SECONDS)
+                except requests.RequestException:
+                    continue
                 if r.ok:
-                    with open(filename, "wb") as f:
-                        f.write(r.content)
+                    try:
+                        with open(filename, "wb") as f:
+                            f.write(r.content)
+                    except OSError as error:
+                        self.last_error = f"Could not write Diki audio: {error}"
+                        return False
+                    self.last_audio_path = filename
                     return True
 
+        self.last_error = f"Diki has no downloadable audio for {phrase}"
         return False
 
     def get_translations(self, phrase):
@@ -142,46 +168,70 @@ class DikiApi:
             reprezentuje odrębny kontekst znaczeniowy (synonimy).
         """
 
-        result = requests.get(f"https://www.diki.pl/slownik-angielskiego?q={phrase}", headers=HEADERS)
-        soup = BeautifulSoup(result.text, "html.parser")
+        try:
+            result = requests.get(
+                f"https://www.diki.pl/slownik-angielskiego?q={prepare_phrase_to_url(phrase)}",
+                headers=HEADERS,
+                timeout=REQUEST_TIMEOUT_SECONDS,
+            )
+            result.raise_for_status()
+        except requests.RequestException:
+            return []
 
-        entities = soup.find_all("div", class_="dictionaryEntity")
-        all_meanings = []
+        return parse_translations(result.text, phrase)
 
-        for entity in entities:
 
-            header_section = entity.find("div", class_="hws")
-            if not header_section:
-                continue
+def parse_translations(html: str, phrase: str) -> list[list[str]]:
+    """Parse a saved or fetched Diki document without performing I/O."""
+    normalized_phrase = " ".join(phrase.lower().split())
+    soup = BeautifulSoup(html, "html.parser")
 
-            # Słowa kluczowe z nagłówka (może być ich kilka np. dla staunch i stanch)
-            # Uwaga: niektóre hasła zawierają zagnieżdżone <span class="stopword">
-            # (np. "whatever floats <span class="stopword">one's</span> boat"),
-            # więc trzeba wymusić separator, inaczej słowa się sklejają
-            # (np. "whatever floatsone'sboat").
-            header_words = [
-                " ".join(hw.get_text(separator=" ", strip=True).split()).lower()
-                for hw in header_section.find_all("span", class_="hw")
-            ]
+    entities = soup.find_all("div", class_="dictionaryEntity")
+    all_meanings = []
 
-            if phrase not in header_words:
-                continue
+    for entity in entities:
 
-            meanings_list = entity.find_all(
-                "ol", class_="foreignToNativeMeanings"
-            )  # Szukam wszystkich znaczeń
-            for m_list in meanings_list:
-                for li in m_list.find_all("li", recursive=False):
+        header_section = entity.find("div", class_="hws")
+        if not header_section:
+            continue
 
-                    current_row_meanings = [
+        # Słowa kluczowe z nagłówka (może być ich kilka np. dla staunch i stanch)
+        # Uwaga: niektóre hasła zawierają zagnieżdżone <span class="stopword">
+        # (np. "whatever floats <span class="stopword">one's</span> boat"),
+        # więc trzeba wymusić separator, inaczej słowa się sklejają
+        # (np. "whatever floatsone'sboat").
+        header_words = [
+            " ".join(hw.get_text(separator=" ", strip=True).split()).lower()
+            for hw in header_section.find_all("span", class_="hw")
+        ]
+
+        if normalized_phrase not in header_words:
+            continue
+
+        meanings_list = entity.find_all(
+            "ol", class_="foreignToNativeMeanings"
+        )  # Szukam wszystkich znaczeń
+        for m_list in meanings_list:
+            for li in m_list.find_all("li", recursive=False):
+
+                current_row_meanings = []
+                for child in li.find_all("span", recursive=False):
+                    classes = child.get("class", [])
+                    if "hw" in classes:
+                        spans = [child]
+                    elif "hiddenNotForChildrenMeaning" in classes:
+                        spans = child.find_all("span", class_="hw", recursive=False)
+                    else:
+                        spans = []
+                    current_row_meanings.extend(
                         " ".join(span.get_text(separator=" ", strip=True).split())
-                        for span in li.find_all("span", class_="hw", recursive=False)
-                    ]
+                        for span in spans
+                    )
 
-                    if current_row_meanings:
-                        all_meanings.append(current_row_meanings)
+                if current_row_meanings:
+                    all_meanings.append(current_row_meanings)
 
-        return all_meanings
+    return all_meanings
 
 
 def prepare_phrase_to_url(phase):
