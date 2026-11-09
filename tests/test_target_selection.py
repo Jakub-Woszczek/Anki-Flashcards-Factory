@@ -1,6 +1,7 @@
 from unittest import TestCase
 
 from backend.services import FactoryService
+from external_APIs.diki_resources import NoAudio
 
 
 class FakeAnki:
@@ -110,8 +111,8 @@ class FakeFlaggedCreateAnki:
 class FakeNoAudioDiki:
     last_error = "Audio unavailable"
 
-    def diki_audio_harness(self, _word):
-        return False
+    def fetch_audio(self, _word):
+        raise NoAudio("Audio unavailable")
 
 
 class TestTargetSelection(TestCase):

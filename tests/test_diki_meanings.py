@@ -1,10 +1,9 @@
 from pathlib import Path
 from unittest import TestCase
-from unittest.mock import Mock, patch
-
-import requests
+from unittest.mock import Mock
 
 from external_APIs.dikiApi import DikiApi, parse_meanings, parse_translations
+from external_APIs.diki_resources import ResourceError
 
 
 class TestDikiMeanings(TestCase):
@@ -35,18 +34,21 @@ class TestDikiMeanings(TestCase):
             ["zabierać", "podwozić (np. kogoś do domu)"], ["ujęcie (podczas kręcenia filmu)"],
         ]
         self.assertEqual(parse_translations(self.html, "take"), expected)
-        response = Mock(text=self.html)
-        with patch("external_APIs.dikiApi.requests.get", return_value=response) as get:
-            self.assertEqual(DikiApi().get_translations("take"), expected)
-        get.assert_called_once()
+        resources = Mock()
+        resources.fetch_html.return_value = self.html
+        self.assertEqual(DikiApi(resources).get_translations("take"), expected)
+        resources.fetch_html.assert_called_once_with("take")
 
     def test_meaning_lookup_fetches_once_and_handles_request_errors(self):
-        with patch("external_APIs.dikiApi.requests.get", return_value=Mock(text=self.html)) as get:
-            self.assertEqual(DikiApi().get_meanings("take"), parse_meanings(self.html, "take"))
-        get.assert_called_once()
-        with patch("external_APIs.dikiApi.requests.get", side_effect=requests.Timeout):
-            self.assertEqual(DikiApi().get_meanings("take"), [])
-            self.assertEqual(DikiApi().get_translations("take"), [])
+        resources = Mock()
+        resources.fetch_html.return_value = self.html
+        api = DikiApi(resources)
+        self.assertEqual(api.get_meanings("take"), parse_meanings(self.html, "take"))
+        resources.fetch_html.assert_called_once()
+        resources.fetch_html.side_effect = ResourceError("Offline and not cached")
+        self.assertEqual(api.get_meanings("take"), [])
+        self.assertEqual(api.get_translations("take"), [])
+        self.assertEqual(api.last_error, "Offline and not cached")
 
     def test_nested_text_and_missing_translation(self):
         html = '''<div class="dictionaryEntity"><div class="hws"><span class="hw">take</span></div>

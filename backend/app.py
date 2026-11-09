@@ -28,6 +28,7 @@ from backend.schemas import (
 )
 from backend.services import FactoryService, ServiceError
 from backend.settings import ROOT_DIR, configured_words_to_add_path
+from external_APIs.diki_lists import coverage
 
 
 load_dotenv(ROOT_DIR / ".env")
@@ -59,6 +60,11 @@ async def service_error_handler(_: Request, error: ServiceError):
 @app.get("/backend/status")
 def status():
     return service.status()
+
+
+@app.get("/backend/offline-coverage")
+def offline_coverage():
+    return coverage(service.diki.resources)
 
 
 @app.post("/backend/shutdown")

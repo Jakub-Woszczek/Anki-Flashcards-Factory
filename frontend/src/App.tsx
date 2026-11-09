@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type ReactNode } from 'react'
 import { ApiError, api } from './api'
+import { OfflineDownloads } from './OfflineDownloads'
 import type {
   Draft,
   DeckContext,
@@ -528,6 +529,8 @@ export default function App() {
           <div className="source-strip"><span>OR</span><div><strong>Use words_to_add.txt</strong><small>Snapshot the append-only project file in its existing order.</small></div><button className="text-button" type="button" onClick={() => void createWordsToAddSession()} disabled={creating}>Run file</button></div>
         </article>
       </section>
+
+      <OfflineDownloads />
 
       <section className="panel review-panel">
         <div className="panel__heading review-panel__heading">

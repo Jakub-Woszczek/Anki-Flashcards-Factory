@@ -6,6 +6,8 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from external_APIs.dikiApi import DikiApi
+from dotenv import load_dotenv
+from external_APIs.diki_resources import ROOT
 from rich.console import Console
 from rich.padding import Padding
 from rich.rule import Rule
@@ -87,9 +89,13 @@ def main():
         sys.exit(1)
 
     phrase = " ".join(sys.argv[1:]).strip().lower()
+    load_dotenv(ROOT / ".env")
     api = DikiApi()
 
     meanings = api.get_meanings(phrase)
+    if api.last_error:
+        console.print(f"[red]{api.last_error}[/red]")
+        sys.exit(1)
 
     if meanings:
         display_meanings(phrase, meanings)

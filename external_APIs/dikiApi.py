@@ -1,15 +1,11 @@
 import os
 import re
+from pathlib import Path
 from typing import TypedDict
 
-import requests
 from bs4 import BeautifulSoup
 
-
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-}
-REQUEST_TIMEOUT_SECONDS = 15
+from external_APIs.diki_resources import DikiResources, ResourceError
 
 
 class SentenceExample(TypedDict):
@@ -23,7 +19,8 @@ class Meaning(TypedDict):
 
 
 class DikiApi:
-    def __init__(self):
+    def __init__(self, resources=None):
+        self.resources = resources if resources is not None else DikiResources()
         self.audio_path = os.getenv("ANKI_MEDIA_FOLDER_PATH")
         self.last_error = None
         self.last_audio_path = None
@@ -35,18 +32,17 @@ class DikiApi:
 
         WARNING: Nie działa dla słów o takim samym zapisie po angielsku i po polsku (tbh nie jest ich dużo)
         """
-        phrase = prepare_phrase_to_url(phrase)
-        url = "https://www.diki.pl/slownik-angielskiego?q=" + phrase
+        self.last_error = None
         try:
-            response = requests.get(url, headers=HEADERS, timeout=REQUEST_TIMEOUT_SECONDS)
-            # Diki serves its "Czy chodziło ci o" suggestions on a 404 page.
-            # The response still contains valid dictionarySuggestions markup.
-            if response.status_code != 404:
-                response.raise_for_status()
-        except requests.RequestException:
+            html = self.resources.fetch_html(phrase)
+        except ResourceError as error:
+            self.last_error = str(error)
             return set()
 
-        soup = BeautifulSoup(response.text, "html.parser")
+        return self._spellings_from_html(html)
+
+    def _spellings_from_html(self, html) -> set:
+        soup = BeautifulSoup(html, "html.parser")
 
         # Znajdź wszystkie elementy słownika
         dictionary_entities = soup.select("div.dictionaryEntity")
@@ -62,6 +58,12 @@ class DikiApi:
                 phrases.add(text)
 
         return phrases
+
+    def lookup(self, phrase) -> tuple[list[list[str]], list[str]]:
+        """One resource read, with per-call failures instead of shared error state."""
+        html = self.resources.fetch_html(phrase)
+        translations = parse_translations(html, phrase)
+        return translations, [] if translations else sorted(self._spellings_from_html(html))
 
     def similar_phrases(self, soup):
         """
@@ -80,67 +82,29 @@ class DikiApi:
         return suggestions
 
     def diki_audio_harness(self, phrase, audio_path=None):
-        """
-        Metoda pobiera dźwięk danego słowa ze słownika Diki, zapisuje go do folderu z mediami Anek
-        lub do folderu w katalogu projektu, jeżeli @audio_path nie jest None.
-
-        Sprawdza wersje url, czasami słowo występuje tylko w jednym wariancie językowym, en/ame oraz
-        w wariancie dla formy słowa (rzeczownik/czasownik).
-        """
+        """Compatibility export for terminal callers; downloads use the shared cache."""
         self.last_error = None
         self.last_audio_path = None
-        word = phrase.replace(" ", "_")
-        word = re.sub(
-            r"[^\w_-]", "", word
-        ).lower()  # Deletes all that is not "a-zA-Z0-9_" and -
+        try:
+            content = self.fetch_audio(phrase)
+            target = self.resources.path(phrase, "audio")
+            destination = audio_path if audio_path is not None else self.audio_path
+            if destination:
+                directory = Path(destination).expanduser()
+                if not directory.is_absolute():
+                    directory = Path(__file__).parent / directory
+                directory.mkdir(parents=True, exist_ok=True)
+                safe_phrase = re.sub(r'[<>:"/\\|?*\0]', "", phrase).strip(". ")
+                target = directory / f"{safe_phrase or 'pronunciation'}.mp3"
+                target.write_bytes(content)
+            self.last_audio_path = str(target)
+            return True
+        except (ResourceError, OSError) as error:
+            self.last_error = str(error)
+            return False
 
-        # Deletes illegal file symbols (Win,Mac,Linux)
-        illegal_chars = r'[<>:"/\\|?*\0:]'
-        safe_phrase = re.sub(illegal_chars, "", phrase)
-
-        langs = ["en", "en-ame"]
-        versions = [
-            "",
-            "-v",
-            "-n",
-        ]  # Refers to the version of word like noun of verb (sometimes occurs)
-
-        for lang in langs:
-            for version in versions:
-
-                target_dir = self.audio_path
-                if audio_path is not None:
-                    target_dir = os.path.join(os.path.dirname(__file__), audio_path)
-
-                if not isinstance(target_dir, str) or not target_dir:
-                    self.last_error = "ANKI_MEDIA_FOLDER_PATH is not configured"
-                    return False
-                try:
-                    os.makedirs(target_dir, exist_ok=True)
-                except OSError as error:
-                    self.last_error = f"Anki media folder is unavailable: {error}"
-                    return False
-                filename = os.path.join(target_dir, f"{safe_phrase}.mp3")
-
-                url = (
-                    f"https://www.diki.pl/images-common/{lang}/mp3/{word}{version}.mp3"
-                )
-                try:
-                    r = requests.get(url, headers=HEADERS, timeout=REQUEST_TIMEOUT_SECONDS)
-                except requests.RequestException:
-                    continue
-                if r.ok:
-                    try:
-                        with open(filename, "wb") as f:
-                            f.write(r.content)
-                    except OSError as error:
-                        self.last_error = f"Could not write Diki audio: {error}"
-                        return False
-                    self.last_audio_path = filename
-                    return True
-
-        self.last_error = f"Diki has no downloadable audio for {phrase}"
-        return False
+    def fetch_audio(self, phrase) -> bytes:
+        return self.resources.fetch_audio(phrase)
 
     def get_translations(self, phrase):
         """
@@ -187,17 +151,14 @@ class DikiApi:
         The separate, automatically generated additional-sentences section is
         excluded. Each example belongs to its containing meaning group.
         """
+        self.last_error = None
         try:
-            result = requests.get(
-                f"https://www.diki.pl/slownik-angielskiego?q={prepare_phrase_to_url(phrase)}",
-                headers=HEADERS,
-                timeout=REQUEST_TIMEOUT_SECONDS,
-            )
-            result.raise_for_status()
-        except requests.RequestException:
+            html = self.resources.fetch_html(phrase)
+        except ResourceError as error:
+            self.last_error = str(error)
             return []
 
-        return parse_meanings(result.text, phrase)
+        return parse_meanings(html, phrase)
 
 
 def parse_translations(html: str, phrase: str) -> list[list[str]]:

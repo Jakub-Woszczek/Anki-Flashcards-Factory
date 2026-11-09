@@ -12,9 +12,8 @@ class FakeDiki:
         self.audio_path = audio_path
         self.last_audio_path = None
 
-    def diki_audio_harness(self, _word):
-        self.last_audio_path = str(self.audio_path)
-        return True
+    def fetch_audio(self, _word):
+        return self.audio_path.read_bytes()
 
 
 class FakeAnki:

@@ -1,4 +1,4 @@
-import requests
+from external_APIs.diki_resources import DikiResources
 from bs4 import BeautifulSoup
 from allNotesDb import NotesDatabase
 from external_APIs.ankiConnect import AnkiConnect
@@ -11,6 +11,7 @@ class RawNotesEditor:
         self.dir = "raw_notes"
         self.diki_url = "https://www.diki.pl/slownik-angielskiego?q="
         self.db = NotesDatabase()
+        self.resources = DikiResources()
 
     def strip_from_empty_lines(self, path):
         # USELESS
@@ -52,8 +53,9 @@ class RawNotesEditor:
 
             for line in f:
                 line = line.strip().lower()
-                response = requests.get(self.diki_url + line)
-                html = response.text
+                if not line:
+                    continue
+                html = self.resources.fetch_html(line)
                 soup = BeautifulSoup(html, "html.parser")
                 possible_spellings = self.diki_possible_spellings(soup)
                 print(f"CHECK {line}")

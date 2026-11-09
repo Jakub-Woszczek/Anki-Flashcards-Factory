@@ -4,13 +4,13 @@ import threading
 import time
 from collections import Counter
 from difflib import SequenceMatcher
-from pathlib import Path
 from typing import Any
 
 from allNotesDb import NotesDatabase
 from backend.storage import SessionStore
 from external_APIs.ankiConnect import AnkiConnect
 from external_APIs.dikiApi import DikiApi
+from external_APIs.diki_resources import ResourceError
 from external_APIs.geminiAPI import GeminiBot
 
 
@@ -327,8 +327,10 @@ class FactoryService:
             raise ServiceError("Provide the English word to refresh Diki translations")
         word = self._normalize_word(requested_word or raw_word)
         existing_note_id = current.get("noteId") or self._find_existing_note_id(word, session)
-        translations = self.diki.get_translations(word)
-        suggestions = [] if translations else sorted(self.diki.possible_spellings(word))
+        try:
+            translations, suggestions = self.diki.lookup(word)
+        except ResourceError as error:
+            raise ServiceError(str(error), 503) from error
         draft = {
             "sourceWord": raw_word,
             "word": word,
@@ -463,19 +465,15 @@ class FactoryService:
         return response
 
     def _write_audio(self, word: str) -> bool:
+        self.diki.last_error = None
         try:
-            if not self.diki.diki_audio_harness(word):
-                return False
-            audio_path = self.diki.last_audio_path
-            if not audio_path:
-                self.diki.last_error = "Diki audio was downloaded but its file could not be located"
-                return False
-            result = self.anki.store_media_file(self._audio_filename(word), Path(audio_path).read_bytes())
+            content = self.diki.fetch_audio(word)
+            result = self.anki.store_media_file(self._audio_filename(word), content)
             if result is None:
                 self.diki.last_error = self.anki.last_error or "Anki could not store the downloaded audio"
                 return False
             return True
-        except (AssertionError, OSError) as error:
+        except (ResourceError, AssertionError, OSError) as error:
             self.diki.last_error = f"Could not prepare Diki audio: {error}"
             return False
 
@@ -516,6 +514,12 @@ class FactoryService:
             existing = self._note_details(existing_note_id)["note"]
             if existing.get("modelName") != target["modelName"]:
                 raise ServiceError("Select the existing note type before updating this learned card", 409)
+            if not audio_downloaded and audio_field:
+                previous_audio = existing.get("fields", {}).get(audio_field, {}).get("value", "")
+                if previous_audio:
+                    fields.pop(audio_field, None)
+                    tags = [tag for tag in tags if tag != "noAudio"]
+                    remove_tags = [tag for tag in remove_tags if tag != "noAudio"]
             english_field = target["fieldMapping"].get("englishField")
             update_fields = {name: value for name, value in fields.items() if name != english_field}
             self.anki.update_note_fields(existing_note_id, update_fields)
@@ -737,8 +741,10 @@ class FactoryService:
         normalized = self._normalize_word(word)
         pseudo_session = {"fieldMapping": field_mapping}
         existing_note_id = self._find_existing_note_id(normalized, pseudo_session)
-        translations = self.diki.get_translations(normalized)
-        suggestions = [] if translations else sorted(self.diki.possible_spellings(normalized))
+        try:
+            translations, suggestions = self.diki.lookup(normalized)
+        except ResourceError as error:
+            raise ServiceError(str(error), 503) from error
         return {
             "word": normalized,
             "exactMatch": bool(translations),

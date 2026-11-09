@@ -1,6 +1,7 @@
 from unittest import TestCase
 
 from backend.services import FactoryService, ServiceError
+from external_APIs.diki_resources import NoAudio
 
 
 class FakeTagAnki:
@@ -34,14 +35,17 @@ class FakeEmptyAnki:
 class FakeDiki:
     last_error = None
 
+    def lookup(self, _word):
+        return [["pierwszy", "drugi"]], []
+
     def get_translations(self, _word):
         return [["pierwszy", "drugi"]]
 
     def possible_spellings(self, _word):
         return []
 
-    def diki_audio_harness(self, _word):
-        return False
+    def fetch_audio(self, _word):
+        raise NoAudio("Audio unavailable")
 
 
 class FakeIndex:

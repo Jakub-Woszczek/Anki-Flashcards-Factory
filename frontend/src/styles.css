@@ -131,6 +131,21 @@ h1, h2, h3 { color: var(--navy-deep); }
 
 .home-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(370px, 0.9fr); gap: 22px; align-items: start; }
 
+.offline-panel { margin-top: 22px; padding: 26px; }
+.offline-panel .panel__heading { flex-wrap: wrap; }
+.offline-panel .panel__heading p:last-child { max-width: 680px; }
+.offline-table-wrap { overflow-x: auto; }
+.offline-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 0.86rem; }
+.offline-table th, .offline-table td { padding: 14px 12px; border-bottom: 1px solid var(--soft-line); vertical-align: top; }
+.offline-table thead { color: var(--blue); }
+.offline-table tbody th { width: 54%; overflow-wrap: anywhere; font-weight: 500; }
+.offline-table td { min-width: 95px; white-space: nowrap; }
+.offline-table small { display: block; margin-top: 5px; color: #50646a; font-size: 0.75rem; }
+.offline-table progress { display: block; width: 100%; min-width: 100px; height: 9px; margin-top: 7px; accent-color: var(--lime-deep); }
+.offline-table .offline-error { color: var(--coral); }
+.offline-run { margin-top: 18px; font-size: 0.8rem; color: #50646a; line-height: 1.7; }
+.offline-run span { display: block; }
+
 .panel {
   border: 1px solid var(--line);
   background: rgba(255, 253, 248, 0.85);
