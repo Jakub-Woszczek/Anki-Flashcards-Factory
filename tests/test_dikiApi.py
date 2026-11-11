@@ -13,6 +13,7 @@ class TestDikiApi(TestCase):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
         self.DikiApi = DikiApi(DikiResources(self.directory.name, interval=0))
+        self.addCleanup(self.DikiApi.resources.close)
 
     @skipUnless(os.getenv("RUN_LIVE_DIKI_TESTS") == "1", "Live Diki requests are opt-in")
     def test_diki_possible_spellings(self):

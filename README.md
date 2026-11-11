@@ -49,7 +49,10 @@ DIKI_CACHE_DIR=data/diki_cache
 # Opcjonalnie, folder list .txt (rowniez podfoldery)
 DIKI_WORDS_DIR=words_to_add
 
-# Odstep po KAZDYM zadaniu: 20 sekund +/- losowe 5 sekund
+# Bazowy odstep procesu tla; adaptacja moze go zwiekszyc po blokadzie.
+DIKI_BACKGROUND_INTERVAL_SECONDS=20
+
+# Losowy dodatek/odjecie od aktualnego odstepu procesu tla.
 DIKI_REQUEST_JITTER_SECONDS=5
 ```
 
@@ -128,31 +131,56 @@ pomijane, wielkosc liter i nadmiarowe spacje nie tworza nowych zasobow. Listy ni
 sa modyfikowane przez downloader. Wgranie pliku tylko przez przegladarke nie
 kopiuje go automatycznie do tego folderu.
 
-Kazde zadanie HTTP (HTML, MP3, kolejne warianty nagrania) czeka 15–25 sekund
-od zakonczenia poprzedniego. Kolejny odstep jest losowany niezaleznie. Blokada i
-termin nastepnego zadania sa wspolne dla aplikacji i procesu tla, rowniez po
-restarcie. Trafienia w cache nie czekaja. Limit 600 sekund obejmuje te odstepy,
-wiec partia moze zakonczyc sie przed 25 slowami. Nastepna kontynuuje brakujace
-zasoby i zapamietany wariant MP3, zamiast zaczynac od nowa.
+Proces tla konczy kazde slowo w kolejnosci **HTML → MP3**, zanim przejdzie do
+nastepnego. Uzywa jednej sesji HTTP w obrebie partii (cookies i polaczenia sa
+ponownie wykorzystywane). Cookies nie sa eksportowane ani zapisywane na dysku.
+Nagrania sa wybierane z linkow w zapisanym HTML: najpierw dokladne haslo,
+potem wariant rozniacy sie tylko spacjami (np. `eyepatch` → `eye patch`).
+Dla kazdej pisowni preferowane jest nagranie brytyjskie, potem amerykanskie.
+Nie wybieramy innych synonimow ani nagran przykladowych zdan i nie zgadujemy
+nazw plikow. Brak linku oznacza brak dostepnego nagrania, bez szesciu prob HTTP.
+Stare wpisy `no_audio` sa automatycznie sprawdzane nowa metoda z lokalnego HTML.
+Zmiana HTML lub wersji selektora pozwala ponownie sprawdzic ujemny wynik.
 
-HTTP 403/429 lub rozpoznana strona anti-bot wstrzymuja pobieranie na co najmniej
-6 godzin; dluzszy `Retry-After` jest respektowany. Bledy polaczenia zatrzymuja
-partie na 5 minut. Pojedynczy `ReadTimeout` lub blad serwera 5xx odklada tylko
-dane slowo i pozwala probowac kolejne. Trzy takie bledy z rzedu zatrzymuja partie
-na 5 minut, nadal z odstepami 15–25 sekund miedzy zadaniami. Inne bledy HTTP lub
-nieprawidlowe odpowiedzi wstrzymuja pobieranie na co najmniej 30 minut.
-Ponawianie blednego zasobu ma rosnacy odstep: 30 minut do 24 godzin.
-Takie odpowiedzi nie zastepuja dobrego cache. Strony 404 z sugestiami sa
-zapisywane, ale nie licza sie jako dokladne dopasowanie. Nie pobieramy dla nich
-zgadywanych MP3. Potwierdzony brak nagrania nie jest ponawiany co partie.
+Poczatkowy odstep procesu tla to 20 sekund +/- 5 sekund po zakonczeniu kazdego
+zadania. HTTP 403/429 lub wykryty challenge podwajaja bazowy odstep (maks. 16×)
+i wstrzymuja dane pobieranie na 6 godzin, potem 12 i maks. 24 godziny przy
+kolejnych blokadach. Dluzszy `Retry-After` ma pierwszenstwo. Pierwsze zadanie po
+pauzie jest proba wznowienia; po sukcesie partia kontynuuje ze zwiekszonym
+odstepem. Kazde 10 poprawnych odpowiedzi z rzedu zmniejsza mnoznik o polowe,
+do poziomu bazowego. Stan adaptacji i odstepow przetrwa restart. Nie ma arbitralnego
+limitu dziennego ani godzinowego. Limit 600 sekund obejmuje czekanie, wiec partia
+moze zakonczyc sie przed 25 slowami i wznowic brakujace nagranie w kolejnym przebiegu.
 
-Raport zachowuje rodzaj bledu (np. `ReadTimeout` lub `HTTP 524`). HTTP 524 oznacza,
-ze Cloudflare nie doczekal sie odpowiedzi serwera Diki; nie jest sam w sobie
-dowodem blokady anti-bot. Zwykle strony slownika zawieraja skrypt Cloudflare —
-jego obecnosc obok poprawnych definicji nie powoduje odrzucenia HTML.
+CLI i glowna aplikacja uzywaja profilu `interactive`; prefetch uzywa `background`.
+Profile wspoldziela dobre pliki cache, ale maja osobne sesje, blokady zadaniowe,
+odstepy, cooldowny i retry bledow sieciowych. Interaktywne zadania nie maja
+odstepu scraperowego i nie czekaja za jego kolejka. Stary globalny cooldown i
+bledy sa jednorazowo przenoszone do profilu tla; dobre pliki pozostaja bez zmian.
+Oba profile nadal lacza sie z tego samego publicznego IP — nie jest to separacja
+sieciowa ani implementacja proxy.
+
+Bledy polaczenia zatrzymuja dany profil na 5 minut. Pojedynczy `ReadTimeout` lub
+5xx odklada dane slowo; trzy takie bledy z rzedu zatrzymuja partie na 5 minut.
+Inne bledy HTTP lub nieprawidlowe odpowiedzi wstrzymuja pobieranie na co najmniej
+30 minut. Retry zasobu rosnie od 30 minut do 24 godzin, ale samo sprawdzenie
+aktywnej pauzy nie zwieksza liczby bledow slowa. Bledne odpowiedzi nie zastepuja
+dobrego cache. Poprawne strony 404 z sugestiami sa zapisywane bez pobierania MP3.
+
+Raport rozroznia nowa blokade (`cooldown`) od pozniejszego przebiegu bez zadan
+(`paused`). Pokazuje mnoznik odstepu oraz liczniki wykrytych challenge i HTTP 429.
+W bazie pozostaje ostatnich 1000 zdarzen HTTP: profil, URL, status, czas,
+wybrane naglowki (`Content-Type`, `Retry-After`, `CF-Ray`, `CF-Mitigated`),
+tytul i powod klasyfikacji. Nie zapisujemy tresci challenge ani cookies/tokenow.
+HTTP 524 jest bledem serwera zrodlowego, a nie samodzielnym dowodem blokady.
+Zwykly skrypt Cloudflare obok poprawnego slownika nie oznacza challenge.
+
+Terminalowy `diki <word>` pokazuje prosty wskaznik pobierania i ma limit
+30 sekund na lookup, obejmujacy blokady, DNS i odczyt calej odpowiedzi.
+Limit nie obejmuje czekania na odpowiedz uzytkownika przy wyborze/zapisie slowa.
 
 `--refresh` jawnie odswieza zasoby, w tym potwierdzone braki, w granicach podanej
-partii. Nadal respektuje wspolne odstepy i cooldown. Przy odswiezaniu wybranych
+partii. Nadal respektuje odstepy i cooldown swojego profilu. Przy odswiezaniu wybranych
 list uzyj `--words-dir`. Normalny harmonogram powinien dzialac bez `--refresh`.
 
 ### Harmonogram macOS (launchd)
@@ -201,7 +229,7 @@ Ustawienie `DIKI_OFFLINE=1` w `.env` wylacza takze pobieranie przez proces tla.
 ### Weryfikacja bez sieci
 
 ```bash
-python -m unittest tests.test_diki_resources tests.test_dikiApi tests.test_diki_meanings tests.test_diki_regression tests.test_audio_sync tests.test_review_stateless tests.test_target_selection tests.test_sync_rate_limit tests.test_session_storage tests.test_queue_diff
+python -m unittest tests.test_diki_fetching tests.test_diki_resources tests.test_dikiApi tests.test_diki_meanings tests.test_diki_regression tests.test_audio_sync tests.test_review_stateless tests.test_target_selection tests.test_sync_rate_limit tests.test_session_storage tests.test_queue_diff
 ```
 
 Testy korzystaja z zapisanych stron i atrap HTTP/Anki. Dwa starsze testy live

@@ -37,9 +37,14 @@ service = FactoryService()
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
-    yield
-    if not getattr(application.state, "shutdown_sync_flushed", False):
-        service.flush_sync()
+    try:
+        yield
+    finally:
+        try:
+            if not getattr(application.state, "shutdown_sync_flushed", False):
+                service.flush_sync()
+        finally:
+            service.diki.resources.close()
 
 
 app = FastAPI(title="Anki Flashcards Factory", docs_url=None, redoc_url=None, lifespan=lifespan)

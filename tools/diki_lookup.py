@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 import sys
 import os
+import signal
+from contextlib import contextmanager
 
 # Allow importing from project root regardless of where the script is called from
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from external_APIs.dikiApi import DikiApi
 from dotenv import load_dotenv
-from external_APIs.diki_resources import ROOT
+from external_APIs.diki_resources import DikiResources, DikiTimeout, ROOT
 from rich.console import Console
 from rich.padding import Padding
 from rich.rule import Rule
@@ -17,6 +19,36 @@ from rich.text import Text
 WORDS_FILE = os.path.join(os.path.dirname(__file__), "..", "words_to_add", "words_to_add.txt")
 
 console = Console()
+LOOKUP_TIMEOUT = 30
+
+
+@contextmanager
+def lookup_timeout(seconds=LOOKUP_TIMEOUT):
+    """CLI/main-thread wall-clock limit, including DNS, locks and trickled bodies.
+
+    Requests' read timeout alone only bounds inactivity, not the entire lookup.
+    This command already targets Unix (the resource layer uses flock).
+    """
+    def timed_out(signum, frame):
+        raise DikiTimeout(f"Diki lookup timed out after {seconds:g}s; try again later")
+
+    previous_handler = signal.signal(signal.SIGALRM, timed_out)
+    previous_timer = signal.setitimer(signal.ITIMER_REAL, seconds)
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous_handler)
+        signal.setitimer(signal.ITIMER_REAL, *previous_timer)
+
+
+def lookup_meanings(api, phrase):
+    try:
+        with console.status(f"Fetching '{phrase}'…"), lookup_timeout():
+            return api.get_meanings(phrase)
+    except DikiTimeout as error:
+        api.last_error = str(error)
+        return []
 
 
 def display_meanings(word, meanings):
@@ -90,9 +122,12 @@ def main():
 
     phrase = " ".join(sys.argv[1:]).strip().lower()
     load_dotenv(ROOT / ".env")
-    api = DikiApi()
+    with DikiResources(profile="interactive") as resources:
+        return run_lookup(DikiApi(resources), phrase)
 
-    meanings = api.get_meanings(phrase)
+
+def run_lookup(api, phrase):
+    meanings = lookup_meanings(api, phrase)
     if api.last_error:
         console.print(f"[red]{api.last_error}[/red]")
         sys.exit(1)
@@ -103,7 +138,14 @@ def main():
         return
 
     # No exact match — look for similar words
-    spellings = api.possible_spellings(phrase)
+    try:
+        with lookup_timeout():
+            spellings = api.possible_spellings(phrase)
+    except DikiTimeout as error:
+        api.last_error = str(error)
+    if api.last_error:
+        console.print(f"[red]{api.last_error}[/red]")
+        sys.exit(1)
     spellings.discard(phrase)
 
     if not spellings:
@@ -116,7 +158,10 @@ def main():
     if chosen is None:
         return
 
-    meanings = api.get_meanings(chosen)
+    meanings = lookup_meanings(api, chosen)
+    if api.last_error:
+        console.print(f"[red]{api.last_error}[/red]")
+        sys.exit(1)
     if not meanings:
         console.print(f"[red]No translations found for '{chosen}'.[/red]")
         sys.exit(1)

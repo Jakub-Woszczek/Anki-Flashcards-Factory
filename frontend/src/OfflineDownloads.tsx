@@ -22,6 +22,9 @@ type Coverage = {
   offlineOnly: boolean
   cooldownUntil: number
   cooldownReason: string | null
+  pacingMultiplier: number
+  requestCounts: Record<string, number>
+  lastRequest: { status: number | null; outcome: string; recoveryProbe: boolean } | null
   lastRun: {
     startedAt: number
     finishedAt: number | null
@@ -76,6 +79,7 @@ export function OfflineDownloads() {
     {error ? <div className="inline-error">{error}</div> : null}
     {coverage ? <>
       <p className="muted">{coverage.offlineOnly ? 'Offline-only mode' : 'Cache-first mode'} · Ready = exact meanings + MP3. Percentages use unique words; this view never downloads resources.</p>
+      <p className="muted">Background pacing: {coverage.pacingMultiplier}× baseline · {coverage.requestCounts.challenge ?? 0} detected challenges · {coverage.requestCounts.denied ?? 0} HTTP 403 denials · {coverage.requestCounts.rate_limited ?? 0} rate limits. Interactive lookups use independent pacing and pauses.</p>
       {coverage.cooldownUntil > Date.now() / 1000 ? <div className="notice notice--error">{coverage.cooldownReason} · Retry after {date(coverage.cooldownUntil)}</div> : null}
       {coverage.lists.length ? <div className="offline-table-wrap"><table className="offline-table">
         <thead><tr><th scope="col">List</th><th scope="col">HTML</th><th scope="col">MP3</th><th scope="col">Offline ready</th></tr></thead>

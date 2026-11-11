@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 
 from external_APIs.diki_lists import coverage, discover_lists
 from external_APIs.diki_resources import (
-    ROOT, BatchDeadline, Deferred, DikiResources, DikiServerError, DikiTimeout,
+    ROOT, BatchDeadline, Blocked, Deferred, DikiResources, DikiServerError, DikiTimeout,
     NoAudio, ResourceError, file_lock,
 )
 
@@ -44,7 +44,7 @@ def _download_batch(resources, lists, summary, batch_size, refresh):
         summary.update(status="offline", message="DIKI_OFFLINE is enabled; no downloads attempted")
         return
     if resources.setting("cooldown_until", 0) > resources.clock():
-        summary.update(status="cooldown", message=resources.setting("cooldown_reason"))
+        summary.update(status="paused", message=resources.pause_message() + "; no request attempted")
         return
     snapshot = resources.snapshot()
     words = dict.fromkeys(word for source in lists for word in source.words)
@@ -76,8 +76,7 @@ def _download_batch(resources, lists, summary, batch_size, refresh):
             if refresh or html.get("state") != "ready":
                 summary["html"] += 1
             resources.set_setting("last_run", summary)
-            # Suggestion-only pages are complete HTML downloads, but fetching six
-            # guessed pronunciation variants for a miss would waste the budget.
+            # Finish each matching word (HTML + advertised recording) before the next.
             if resources.metadata(word, "html")["exact_match"]:
                 try:
                     resources.fetch_audio(word, refresh=refresh)
@@ -88,6 +87,16 @@ def _download_batch(resources, lists, summary, batch_size, refresh):
             consecutive_failures = 0
         except BatchDeadline:
             raise
+        except Deferred as error:
+            # A new Blocked response is a real error; an existing pause isn't.
+            if isinstance(error, Blocked):
+                summary["errors"] += 1
+                summary.update(status="cooldown", message=f"{word}: {error}")
+                break
+            summary["message"] = str(error)
+            if resources.setting("cooldown_until", 0) > resources.clock():
+                summary["status"] = "paused"
+                break
         except ResourceError as error:
             summary["errors"] += 1
             summary["message"] = f"{word}: {error}"
@@ -101,7 +110,7 @@ def _download_batch(resources, lists, summary, batch_size, refresh):
                     resources._cooldown(300, reason)
                     summary.update(status="cooldown", message=reason)
                     break
-            elif not isinstance(error, Deferred):
+            else:
                 summary["status"] = "error"
                 break
         resources.set_setting("last_run", summary)
@@ -122,10 +131,11 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.batch_size < 1 or args.max_runtime <= 0:
         parser.error("batch-size and max-runtime must be positive")
-    resources = DikiResources(args.cache_dir, deadline=time.time() + args.max_runtime)
     lists = discover_lists(args.words_dir)
-    result = coverage(resources, lists) if args.report else run_batch(
-        resources, lists, batch_size=args.batch_size, refresh=args.refresh)
+    with DikiResources(args.cache_dir, profile="background",
+                       deadline=time.time() + args.max_runtime) as resources:
+        result = coverage(resources, lists) if args.report else run_batch(
+            resources, lists, batch_size=args.batch_size, refresh=args.refresh)
     print(json.dumps(result, indent=2, ensure_ascii=False))
     return 1 if result.get("status") in {"error", "source_error"} else 0
 

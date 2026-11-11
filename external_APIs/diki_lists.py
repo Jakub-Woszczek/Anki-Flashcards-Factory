@@ -44,7 +44,7 @@ def discover_lists(directory=None) -> list[WordList]:
 
 def coverage(resources: DikiResources, lists=None):
     lists = discover_lists() if lists is None else lists
-    snapshot = resources.snapshot()
+    snapshot = resources.snapshot(profile="background")
     rows = []
     for source in lists:
         row = {"name": source.name, "entries": source.entries, "total": len(source.words),
@@ -65,7 +65,10 @@ def coverage(resources: DikiResources, lists=None):
             row["pending"] += int(not has_html or (exact and not has_audio and audio.get("state") != "no_audio"))
         row["percent"] = round(100 * row["ready"] / row["total"], 1) if row["total"] else 0
         rows.append(row)
-    return {"lists": rows, "lastRun": resources.setting("last_run"),
-            "cooldownUntil": resources.setting("cooldown_until", 0),
-            "cooldownReason": resources.setting("cooldown_reason"),
+    return {"lists": rows, "lastRun": resources.setting("last_run", profile="background"),
+            "cooldownUntil": resources.setting("cooldown_until", 0, profile="background"),
+            "cooldownReason": resources.setting("cooldown_reason", profile="background"),
+            "pacingMultiplier": resources.setting("pacing_multiplier", 1, profile="background"),
+            "requestCounts": resources.setting("request_counts", {}, profile="background"),
+            "lastRequest": resources.setting("last_request", profile="background"),
             "offlineOnly": resources.offline}

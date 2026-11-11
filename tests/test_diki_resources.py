@@ -19,7 +19,7 @@ from tools.diki_launchd import configuration
 from tools.diki_prefetch import run_batch
 
 
-HTML = (Path(__file__).parent / "diki_cases" / "take.html").read_bytes()
+HTML = (Path(__file__).parent / "diki_cases" / "audio-take.html").read_bytes()
 MP3 = b"ID3\x04\x00\x00test-pronunciation"
 SUGGESTIONS = b'<div class="dictionarySuggestions"><a>take</a></div>'
 
@@ -55,9 +55,12 @@ class TestDikiResources(TestCase):
 
     def resources(self, **kwargs):
         defaults = dict(clock=self.clock, sleep=self.clock.sleep,
-                        uniform=lambda low, high: 20, get=self.get)
+                        uniform=lambda low, high: (low + high) / 2, get=self.get,
+                        profile="background", interval=20)
         defaults.update(kwargs)
-        return DikiResources(self.root / "cache", **defaults)
+        resources = DikiResources(self.root / "cache", **defaults)
+        self.addCleanup(resources.close)
+        return resources
 
     def test_disk_cache_is_shared_and_offline_hits_never_wait_or_request(self):
         resources = self.resources()
@@ -195,14 +198,15 @@ class TestDikiResources(TestCase):
         self.assertEqual(resources.fetch_html("take").encode(), HTML)
 
     def test_audio_fallback_is_paced_and_no_recording_is_terminal_until_refresh(self):
-        self.get.side_effect = [response(b"not found", 404) for _ in range(3)] + [response(MP3)]
         resources = self.resources()
+        resources._save("streamline", "html", HTML.replace(b"take", b"streamline"), 200, "fixture", True)
+        self.get.side_effect = [response(b"not found", 404), response(MP3)]
         self.assertEqual(resources.fetch_audio("streamline"), MP3)
         self.assertEqual([call.args[0].split("/images-common/")[1] for call in self.get.call_args_list],
-                         ["en/mp3/streamline.mp3", "en/mp3/streamline-v.mp3",
-                          "en/mp3/streamline-n.mp3", "en-ame/mp3/streamline.mp3"])
-        self.assertEqual(self.clock.waits, [20, 20, 20])
-        self.get.side_effect = [response(b"not found", 404) for _ in range(6)]
+                         ["en/mp3/streamline.mp3", "en-ame/mp3/streamline.mp3"])
+        self.assertEqual(self.clock.waits, [20])
+        resources._save("missing", "html", HTML.replace(b"take", b"missing"), 200, "fixture", True)
+        self.get.side_effect = [response(b"not found", 404) for _ in range(2)]
         with self.assertRaises(NoAudio):
             resources.fetch_audio("missing")
         self.assertEqual(resources.metadata("missing", "audio")["state"], "no_audio")
@@ -216,6 +220,7 @@ class TestDikiResources(TestCase):
     def test_invalid_mp3_and_corrupt_cache_are_not_reported_ready(self):
         self.get.return_value = response(b"<html>not audio</html>")
         resources = self.resources()
+        resources._save("take", "html", HTML, 200, "fixture", True)
         with self.assertRaisesRegex(ResourceError, "invalid MP3"):
             resources.fetch_audio("take")
         self.assertFalse(resources.path("take", "audio").exists())
@@ -249,11 +254,13 @@ class TestDikiResources(TestCase):
         self.assertTrue(self.get.call_args.kwargs["headers"]["User-Agent"].startswith("Mozilla/5.0"))
         self.assertEqual(resources.path("../../outside", "audio").parent, resources.root / "audio")
 
-    def test_missing_positive_audio_restarts_variants_instead_of_becoming_a_false_miss(self):
+    def test_missing_positive_audio_restarts_advertised_urls_instead_of_becoming_a_false_miss(self):
         resources = self.resources()
+        resources._save("take", "html", HTML, 200, "fixture", True)
         resources._save("take", "audio", MP3, 200, "fixture")
         with resources.db() as db:
-            db.execute("UPDATE resources SET cursor=6 WHERE word='take' AND kind='audio'")
+            db.execute("""INSERT INTO resource_failures(profile,word,kind,cursor,plan_digest)
+                VALUES ('background','take','audio',2,'old-plan')""")
         resources.path("take", "audio").unlink()
         self.get.return_value = response(MP3)
         self.assertEqual(resources.fetch_audio("take"), MP3)
@@ -272,7 +279,7 @@ class TestDikiResources(TestCase):
         summary = run_batch(resumed, lists)
         self.assertEqual(summary["status"], "complete")
         self.assertEqual((summary["html"], summary["audio"]), (0, 1))
-        self.assertTrue(self.get.call_args.args[0].endswith("/take-v.mp3"))
+        self.assertTrue(self.get.call_args.args[0].endswith("/en-ame/mp3/take.mp3"))
         self.get.reset_mock()
         self.assertEqual(run_batch(resumed, lists)["attempted"], 0)
         self.get.assert_not_called()
