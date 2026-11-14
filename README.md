@@ -244,3 +244,16 @@ Diki sa domyslnie pomijane (`RUN_LIVE_DIKI_TESTS=1` wlacza je jawnie).
 
 Starszy indeks JSON ustawiony przez `DATABASE_PATH` jest jednokrotnie
 importowany do SQLite przy pierwszym uruchomieniu.
+
+## Migracja kontraktow danych notatek (w toku)
+
+Cel, zasady parsowania pol, iteracyjny workflow oraz punkt wznowienia prac sa w
+[Note data contracts — Migration](note-data-contracts.md#migration).
+Dokument opisuje tez zakonczona migracje 44 notatek obrazkowych do
+`TEMP Image recall`, wylaczenia z kontraktow i pozostale pola do opracowania.
+
+Aktualny audyt tylko do odczytu (na razie sprawdza wylacznie `en_word`):
+
+```bash
+python -m tools.audit_note_contracts --sample-size 10
+```
