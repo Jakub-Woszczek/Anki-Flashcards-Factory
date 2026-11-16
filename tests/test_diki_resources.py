@@ -319,16 +319,22 @@ class TestDikiResources(TestCase):
         self.get.assert_not_called()
 
     def test_cached_resources_can_create_anki_note_without_network_or_media_directory(self):
+        from tests.completion_helpers import install_completion
         resources = self.resources(offline=True)
         resources._save("take", "html", HTML, 200, "fixture", True)
         resources._save("take", "audio", MP3, 200, "fixture")
         service = FactoryService.__new__(FactoryService)
+        install_completion(self, service)
         service.diki = DikiApi(resources)
         service.diki.audio_path = None
         service.anki = Mock(last_error=None)
         service.anki.add_note.return_value = 123
         service.anki.store_media_file.return_value = "take.mp3"
         service.anki.sync.return_value = False  # Internet-offline AnkiWeb sync
+        service.anki.invoke.return_value = "Test profile"
+        service.anki.get_note.return_value = {"noteId": 123, "modelName": "Basic", "tags": [],
+                                             "fields": {"Front": {"value": "take"}, "Audio": {"value": "[sound:take.mp3]"}}}
+        service.anki.get_note_cards.return_value = [{"deckName": "English"}]
         service.notes = Mock()
         target = {"deckName": "English", "modelName": "Basic", "fieldMapping": {"audioField": "Audio"}}
         self.assertTrue(service.diki.get_translations("take"))
@@ -341,9 +347,15 @@ class TestDikiResources(TestCase):
         self.get.assert_not_called()
 
     def test_offline_update_preserves_existing_sound_and_does_not_add_no_audio_tag(self):
+        from tests.completion_helpers import install_completion
         service = FactoryService.__new__(FactoryService)
+        install_completion(self, service)
         service.diki = DikiApi(self.resources(offline=True))
         service.anki = Mock(last_error=None)
+        service.anki.invoke.return_value = "Test profile"
+        service.anki.get_note.return_value = {"noteId": 123, "modelName": "Basic", "tags": [],
+                                             "fields": {"Back": {"value": "brać"}, "Audio": {"value": "[sound:old.mp3]"}}}
+        service.anki.get_note_cards.return_value = [{"deckName": "English"}]
         service.notes = Mock()
         existing = {"modelName": "Basic", "fields": {"Audio": {"value": "[sound:old.mp3]"}}, "tags": []}
         target = {"deckName": "English", "modelName": "Basic", "fieldMapping": {"audioField": "Audio"}}

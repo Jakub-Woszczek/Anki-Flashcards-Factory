@@ -2,6 +2,7 @@ from unittest import TestCase
 
 from backend.services import FactoryService, ServiceError
 from external_APIs.diki_resources import NoAudio
+from tests.completion_helpers import ReadBackAnki, install_completion
 
 
 class FakeTagAnki:
@@ -49,6 +50,9 @@ class FakeDiki:
 
 
 class FakeIndex:
+    def load_db(self):
+        pass
+
     def get_note_id(self, _word):
         return None
 
@@ -59,8 +63,9 @@ class FakeIndex:
         pass
 
 
-class FakeCommitAnki:
+class FakeCommitAnki(ReadBackAnki):
     last_error = None
+    note_id = 555
 
     def model_schema(self, model_name):
         return {"name": model_name, "fields": ["Front", "Back"]}
@@ -119,6 +124,7 @@ class TestReviewStateless(TestCase):
 
     def test_item_commit_creates_a_note_and_sets_the_card_flag(self):
         service = FactoryService.__new__(FactoryService)
+        install_completion(self, service)
         service.anki = FakeCommitAnki()
         service.notes = FakeIndex()
         service.diki = FakeDiki()

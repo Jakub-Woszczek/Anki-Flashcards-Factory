@@ -3,6 +3,7 @@ import sys
 import os
 import signal
 from contextlib import contextmanager
+from pathlib import Path
 
 # Allow importing from project root regardless of where the script is called from
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -10,6 +11,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from external_APIs.dikiApi import DikiApi
 from dotenv import load_dotenv
 from external_APIs.diki_resources import DikiResources, DikiTimeout, ROOT
+from backend.word_list import append_word
 from rich.console import Console
 from rich.padding import Padding
 from rich.rule import Rule
@@ -94,9 +96,10 @@ def ask_save(word):
         print()
         return
     if answer == "y":
-        with open(WORDS_FILE, "a") as f:
-            f.write(f"{word}\n")
-        console.print(f"[green]✓[/green] Appended to words_to_add.txt")
+        if append_word(Path(WORDS_FILE), word):
+            console.print(f"[green]✓[/green] Appended to words_to_add.txt")
+        else:
+            console.print(f"[yellow]'{word}' is already in words_to_add.txt[/yellow]")
 
 
 def pick_from_list(options, prompt="Pick"):

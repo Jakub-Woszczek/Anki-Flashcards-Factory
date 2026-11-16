@@ -2,6 +2,7 @@ from unittest import TestCase
 
 from backend.services import FactoryService
 from external_APIs.diki_resources import NoAudio
+from tests.completion_helpers import ReadBackAnki, install_completion
 
 
 class FakeAnki:
@@ -24,6 +25,9 @@ class FakeIndex:
     def add_word(self, note_id, word):
         self.added.append((note_id, word))
 
+    def load_db(self):
+        pass
+
 
 class FakeDuplicateAnki:
     last_error = None
@@ -36,7 +40,7 @@ class FakeDuplicateAnki:
         return [{"noteId": 12, "fields": {"en_word": {"value": "streamline"}}}]
 
 
-class FakeCustomCardAnki:
+class FakeCustomCardAnki(ReadBackAnki):
     last_error = None
 
     def model_schema(self, model_name):
@@ -95,10 +99,11 @@ class FakeDuplicateActionSessions:
         return {"id": session_id, "draft": draft}
 
 
-class FakeFlaggedCreateAnki:
+class FakeFlaggedCreateAnki(ReadBackAnki):
     last_error = None
 
     def add_note(self, _deck_name, _model_name, _fields, _tags):
+        self.call = (_deck_name, _model_name, _fields, _tags)
         return 99
 
     def set_note_cards_flag(self, note_id, flag):
@@ -192,6 +197,7 @@ class TestTargetSelection(TestCase):
 
     def test_custom_card_uses_all_schema_fields_and_advances_the_queue(self):
         service = FactoryService.__new__(FactoryService)
+        install_completion(self, service)
         service.anki = FakeCustomCardAnki()
         service.notes = FakeIndex()
         service.sessions = FakeCustomSessions()
@@ -209,7 +215,8 @@ class TestTargetSelection(TestCase):
         )
 
         self.assertEqual(service.anki.call, ("English::test", "Basic", {"Front": "streamline", "Back": "custom meaning"}))
-        self.assertEqual(service.notes.added, [(99, "streamline")])
+        with service.completions.connect() as db:
+            self.assertEqual(tuple(db.execute("SELECT note_id,en_word FROM note_index").fetchone()), (99, "streamline"))
         self.assertEqual(service.sessions.completed, "session-1")
         self.assertEqual(result["noteId"], 99)
 
@@ -249,6 +256,7 @@ class TestTargetSelection(TestCase):
 
     def test_creating_a_note_flags_every_generated_card(self):
         service = FactoryService.__new__(FactoryService)
+        install_completion(self, service)
         service.anki = FakeFlaggedCreateAnki()
         service.notes = FakeIndex()
         service.diki = FakeNoAudioDiki()

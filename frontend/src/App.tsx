@@ -704,7 +704,7 @@ function CustomCardForm({
   decks: string[]
   models: string[]
   onClose: () => void
-  onComplete: (result: { action: string; noteId: number; session: Session; syncWarning?: string }) => Promise<void>
+  onComplete: (result: { action: string; noteId: number; session: Session; syncWarning?: string; cleanupWarning?: string }) => Promise<void>
 }) {
   const [deckName, setDeckName] = useState(initialDeckName)
   const [modelName, setModelName] = useState(initialModelName)
@@ -740,7 +740,7 @@ function CustomCardForm({
     setSaving(true)
     setError(null)
     try {
-      const result = await api.post<{ action: string; noteId: number; session: Session; syncWarning?: string }>(
+      const result = await api.post<{ action: string; noteId: number; session: Session; syncWarning?: string; cleanupWarning?: string }>(
         `/backend/sessions/${sessionId}/current/custom-card`,
         { deckName, modelName, fields },
       )
@@ -1297,11 +1297,11 @@ function Workspace({ sessionId, review, onExit }: { sessionId?: string; review?:
     setError(null)
     try {
       if (draftTimer.current) window.clearTimeout(draftTimer.current)
-      let result: { action: string; noteId: number; audioDownloaded: boolean; audioError?: string; flagWarning?: string; syncWarning?: string }
+      let result: { action: string; noteId: number; audioDownloaded: boolean; audioError?: string; flagWarning?: string; syncWarning?: string; cleanupWarning?: string; cleanupPending?: boolean }
       let nextSession: Session
       if (isReview) {
         const target = effectiveConfig()
-        result = await api.post<{ action: string; noteId: number; audioDownloaded: boolean; audioError?: string; flagWarning?: string; syncWarning?: string }>('/backend/review/item/commit', {
+        result = await api.post<{ action: string; noteId: number; audioDownloaded: boolean; audioError?: string; flagWarning?: string; syncWarning?: string; cleanupWarning?: string; cleanupPending?: boolean }>('/backend/review/item/commit', {
           noteId: session.current?.noteId,
           cardId: session.current?.cardId,
           draft,
@@ -1312,21 +1312,25 @@ function Workspace({ sessionId, review, onExit }: { sessionId?: string; review?:
           modelName: target.modelName,
           fieldMapping: target.fieldMapping,
         })
-        const remaining = reviewItems.slice(1)
-        const completed = reviewCompleted + 1
-        setReviewItems(remaining)
-        setReviewCompleted(completed)
-        nextSession = nextReviewSession(remaining, completed)
+        if (result.cleanupPending) {
+          nextSession = session
+        } else {
+          const remaining = reviewItems.slice(1)
+          const completed = reviewCompleted + 1
+          setReviewItems(remaining)
+          setReviewCompleted(completed)
+          nextSession = nextReviewSession(remaining, completed)
+        }
       } else {
         await persistDraft(draft, false)
-        const sessionResult = await api.post<{ action: string; noteId: number; audioDownloaded: boolean; audioError?: string; flagWarning?: string; syncWarning?: string; session: Session }>(
+        const sessionResult = await api.post<{ action: string; noteId: number; audioDownloaded: boolean; audioError?: string; flagWarning?: string; syncWarning?: string; cleanupWarning?: string; session: Session }>(
           `/backend/sessions/${sessionId}/current/commit`,
           { action: isDuplicate ? 'update' : 'create', removeTags, flag },
         )
         result = sessionResult
         nextSession = sessionResult.session
       }
-      setNotice(`${result.action === 'updated' ? 'Updated' : 'Created'} note ${result.noteId}${result.audioDownloaded ? ' with audio.' : `. Audio was unavailable, so noAudio will be tagged: ${result.audioError ?? 'unknown reason'}`}${result.flagWarning ? ` Flag was not changed: ${result.flagWarning}` : ''}${result.syncWarning ? ` Anki sync is pending: ${result.syncWarning}` : ''}`)
+      setNotice(`${result.action === 'updated' ? 'Updated' : 'Created'} note ${result.noteId}${result.audioDownloaded ? ' with audio.' : `. Audio was unavailable, so noAudio will be tagged: ${result.audioError ?? 'unknown reason'}`}${result.flagWarning ? ` Flag was not changed: ${result.flagWarning}` : ''}${result.syncWarning ? ` Anki sync is pending: ${result.syncWarning}` : ''}${result.cleanupWarning ? ` ${result.cleanupWarning}` : ''}`)
       setSession(nextSession)
       await hydrateCurrent(nextSession, config)
     } catch (requestError) {
@@ -1558,7 +1562,7 @@ function Workspace({ sessionId, review, onExit }: { sessionId?: string; review?:
             models={models}
             onClose={() => setCustomCardOpen(false)}
             onComplete={async (result) => {
-              setNotice(`Created custom note ${result.noteId}.${result.syncWarning ? ` Anki sync is pending: ${result.syncWarning}` : ''}`)
+              setNotice(`Created custom note ${result.noteId}.${result.syncWarning ? ` Anki sync is pending: ${result.syncWarning}` : ''}${result.cleanupWarning ? ` ${result.cleanupWarning}` : ''}`)
               setSession(result.session)
               setCustomCardOpen(false)
               await hydrateCurrent(result.session, config)

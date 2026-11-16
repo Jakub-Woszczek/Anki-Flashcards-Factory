@@ -139,6 +139,7 @@ celerybeat.pid
 .envrc
 .venv
 data/
+words_to_add/*.lock
 frontend/node_modules/
 frontend/dist/
 env/

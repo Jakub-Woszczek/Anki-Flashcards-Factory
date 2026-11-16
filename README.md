@@ -93,6 +93,36 @@ a kolejne synchronizacje sa ograniczone do jednej na 10 sekund. Przycisk
 bezpiecznie zatrzymuje lokalny serwer. Pojedyncze Ctrl-C w terminalu rowniez
 wykonuje oczekujaca synchronizacje podczas zamykania.
 
+## Usuwanie dodanych slow z listy
+
+Po zapisie aplikacja odczytuje notatke przez AnkiConnect po zwroconym `noteId`
+i porownuje typ, wyslane pola, wymagane/usuwane tagi oraz docelowa talie.
+Dopiero po zgodnym odczycie usuwa wszystkie wystapienia potwierdzonego slowa
+z `words_to_add/words_to_add.txt`. Dotyczy to tworzenia, aktualizacji i custom
+cards. Zwykle pominiecie slowa nie usuwa go z pliku. Przy zmianie hasla usuwane
+jest tylko faktycznie zapisane haslo, nie pierwotne slowo z kolejki.
+
+Historia pozostaje w lokalnej bazie SQLite: `note_index` zawiera powiazanie
+slowo → notatka, `word_saves` zapis oczekiwanej/odczytanej zawartosci i stan
+operacji, a `word_list_archive` oryginalne usuniete linie. Kopia pliku sprzed
+zmiany trafia do `data/archives/words-to-add-*.txt.bak`. Blokada wspolna z CLI
+chroni przed utrata rownolegle dopisywanych slow.
+
+Nieudana weryfikacja pozostawia slowo i kolejke. Jesli Anki zapisalo notatke,
+ale odpowiedz/odczyt zawiodly, ponowienie najpierw sprawdza poprzednia operacje,
+zamiast slepo tworzyc duplikat. Nieudane usuniecie z pliku jest raportowane jako
+`cleanupPending`; jego ponowienie nie tworzy kolejnej notatki. Synchronizacja
+z AnkiWeb nie jest warunkiem lokalnego potwierdzenia.
+
+Z dzialajacym Anki mozna tez oczyscic historyczne wpisy (po dokladnym dopasowaniu
+`en_word`, bez porownywania dawnych tlumaczen z nieistniejacym payloadem):
+
+```bash
+python -m tools.clean_words_to_add                 # tylko raport
+python -m tools.clean_words_to_add --apply         # odczyt kontrolny, archiwum, usuniecie
+python -m tools.clean_words_to_add --apply --resume # wznowienie niedokonczonych operacji
+```
+
 ## Diki offline: HTML i MP3
 
 Aplikacja i narzedzia terminalowe korzystaja ze wspolnego modulu zasobow:
