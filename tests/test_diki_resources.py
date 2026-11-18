@@ -334,7 +334,7 @@ class TestDikiResources(TestCase):
         service.anki.invoke.return_value = "Test profile"
         service.anki.get_note.return_value = {"noteId": 123, "modelName": "Basic", "tags": [],
                                              "fields": {"Front": {"value": "take"}, "Audio": {"value": "[sound:take.mp3]"}}}
-        service.anki.get_note_cards.return_value = [{"deckName": "English"}]
+        service.anki.get_note_cards.return_value = [{"cardId": 1230, "deckName": "English"}]
         service.notes = Mock()
         target = {"deckName": "English", "modelName": "Basic", "fieldMapping": {"audioField": "Audio"}}
         self.assertTrue(service.diki.get_translations("take"))
@@ -355,11 +355,13 @@ class TestDikiResources(TestCase):
         service.anki.invoke.return_value = "Test profile"
         service.anki.get_note.return_value = {"noteId": 123, "modelName": "Basic", "tags": [],
                                              "fields": {"Back": {"value": "brać"}, "Audio": {"value": "[sound:old.mp3]"}}}
-        service.anki.get_note_cards.return_value = [{"deckName": "English"}]
+        service.anki.get_note_cards.return_value = [{"cardId": 1230, "deckName": "English"}]
         service.notes = Mock()
         existing = {"modelName": "Basic", "fields": {"Audio": {"value": "[sound:old.mp3]"}}, "tags": []}
         target = {"deckName": "English", "modelName": "Basic", "fieldMapping": {"audioField": "Audio"}}
-        with patch.object(service, "_note_details", return_value={"note": existing}):
+        with patch.object(service, "_note_details", return_value={
+            "note": existing, "cards": service.anki.get_note_cards.return_value,
+        }):
             service._perform_commit(target, {"Back": "brać", "Audio": "[sound:take.mp3]"},
                                     [], [], "update", 123, "take", None, None)
         service.anki.update_note_fields.assert_called_once_with(123, {"Back": "brać"})

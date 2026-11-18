@@ -549,7 +549,12 @@ class FactoryService:
         else:
             if not existing_note_id:
                 raise ServiceError("There is no existing note to update", 404)
-            existing = self._note_details(existing_note_id)["note"]
+            details = self._note_details(existing_note_id)
+            existing = details["note"]
+            if self.anki.last_error:
+                raise VerificationError(self.anki.last_error)
+            # Refresh content in place; the queue target only controls new notes.
+            card_decks = self.completions.card_decks(details["cards"])
             if existing.get("modelName") != target["modelName"]:
                 raise ServiceError("Select the existing note type before updating this learned card", 409)
             if not audio_downloaded and audio_field:
@@ -564,7 +569,7 @@ class FactoryService:
             expected_fields.update(update_fields)
             if english_field and self._normalize_anki_field_value(expected_fields.get(english_field, "")) != word:
                 raise ServiceError("The existing note contains a different English word; word retained", 409)
-            expected = {"deckName": target["deckName"], "modelName": target["modelName"],
+            expected = {"cardDecks": card_decks, "modelName": target["modelName"],
                         "fields": expected_fields, "tags": tags,
                         "removeTags": sorted(set(remove_tags) - set(tags))}
             self.completions.submitted(save_id, existing_note_id, expected)
@@ -580,9 +585,6 @@ class FactoryService:
                 self.anki.remove_tag_from_note(existing_note_id, tag)
                 if self.anki.last_error:
                     raise ServiceError(self.anki.last_error, 503)
-            self.anki.change_note_deck(existing_note_id, target["deckName"])
-            if self.anki.last_error:
-                raise ServiceError(self.anki.last_error, 503)
             result = {"action": "updated", "noteId": existing_note_id, "audioDownloaded": audio_downloaded}
 
         result.update(self.completions.finish(self.anki, save_id))

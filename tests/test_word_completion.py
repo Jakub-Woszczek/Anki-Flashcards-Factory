@@ -18,6 +18,7 @@ class MemoryAnki:
     def __init__(self):
         self.notes = {}
         self.decks = {}
+        self.cards = {}
         self.add_calls = 0
         self.profile = "Test profile"
         self.bad_read = False
@@ -56,7 +57,7 @@ class MemoryAnki:
 
     def get_note_cards(self, note_id):
         self.last_error = None
-        return [{"deckName": self.decks[note_id]}]
+        return copy.deepcopy(self.cards.get(note_id, [{"cardId": note_id * 10, "deckName": self.decks[note_id]}]))
 
     def update_note_fields(self, note_id, fields):
         self.notes[note_id]["fields"].update({name: {"value": value} for name, value in fields.items()})
@@ -69,6 +70,8 @@ class MemoryAnki:
 
     def change_note_deck(self, note_id, deck):
         self.decks[note_id] = deck
+        for card in self.cards.get(note_id, []):
+            card["deckName"] = deck
 
     def model_schema(self, model):
         return {"name": model, "fields": ["en_word", "pl_translation", "audio_en"]}
@@ -215,6 +218,67 @@ class TestWordCompletion(TestCase):
         self.assertEqual(self.anki.notes[123]["fields"]["audio_en"]["value"], "[sound:old.mp3]")
         self.assertNotIn("noAudio", self.anki.notes[123]["tags"])
         self.assertEqual(result["removedLines"], 2)
+
+    def test_update_preserves_original_deck_instead_of_queue_target(self):
+        self.anki.add_note("Old deck", "Basic", {"en_word": "take", "pl_translation": "old"}, [])
+        with patch.object(self.anki, "change_note_deck", wraps=self.anki.change_note_deck) as move:
+            result = self.commit("update", 123)
+        self.assertTrue(result["verified"])
+        self.assertEqual(self.anki.decks[123], "Old deck")
+        self.assertEqual(self.anki.notes[123]["fields"]["pl_translation"]["value"], "brać")
+        self.assertEqual(result["noteId"], 123)
+        move.assert_not_called()
+
+    def test_update_preserves_sibling_cards_in_different_decks(self):
+        self.anki.add_note("Old deck", "Basic", {"en_word": "take", "pl_translation": "old"}, [])
+        cards = [{"cardId": 1230, "deckName": "Old deck"},
+                 {"cardId": 1231, "deckName": "Reverse deck"}]
+        self.anki.cards[123] = copy.deepcopy(cards)
+        result = self.commit("update", 123)
+        self.assertTrue(result["verified"])
+        self.assertEqual(self.anki.get_note_cards(123), cards)
+
+    def test_update_retry_verifies_persisted_original_deck_before_cleanup(self):
+        self.anki.add_note("Old deck", "Basic", {"en_word": "take", "pl_translation": "old"}, [])
+        real_update = self.anki.update_note_fields
+
+        def update_and_move(note_id, fields):
+            real_update(note_id, fields)
+            self.anki.decks[note_id] = "Unexpected deck"
+
+        with patch.object(self.anki, "update_note_fields", side_effect=update_and_move) as update:
+            with self.assertRaisesRegex(ServiceError, "deck"):
+                self.commit("update", 123)
+            self.assertEqual(self.words.read_bytes(), self.original)
+            self.service.completions = WordCompletion(self.store.db_path, self.words)
+            with self.assertRaisesRegex(ServiceError, "deck"):
+                self.commit("update", 123)
+            self.assertEqual(self.words.read_bytes(), self.original)
+            self.anki.decks[123] = "Old deck"
+            result = self.commit("update", 123)
+            update.assert_called_once()
+        self.assertTrue(result["resumed"])
+        self.assertTrue(result["verified"])
+        self.assertEqual(self.anki.decks[123], "Old deck")
+
+    def test_update_requires_readable_original_card_decks(self):
+        self.anki.add_note("Old deck", "Basic", {"en_word": "take", "pl_translation": "old"}, [])
+        with patch.object(self.anki, "get_note_cards", return_value=[]):
+            with self.assertRaisesRegex(ServiceError, "deck"):
+                self.commit("update", 123)
+        self.assertEqual(self.anki.notes[123]["fields"]["pl_translation"]["value"], "old")
+        self.assertEqual(self.words.read_bytes(), self.original)
+
+    def test_review_update_preserves_original_deck(self):
+        self.anki.add_note("Old deck", "Basic", {"en_word": "take", "pl_translation": "old"}, [])
+        result = self.service.review_item_commit(
+            note_id=123, card_id=None,
+            draft={"word": "take", "groups": [[{"value": "brać", "selected": True}]], "tags": []},
+            action="update", remove_tags=[], flag=None, deck_name=self.target["deckName"],
+            model_name=self.target["modelName"], field_mapping=self.target["fieldMapping"],
+        )
+        self.assertTrue(result["verified"])
+        self.assertEqual(self.anki.decks[123], "Old deck")
 
     def test_skip_never_removes_from_source(self):
         self.service.sessions = Mock()

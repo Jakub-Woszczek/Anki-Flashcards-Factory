@@ -135,6 +135,22 @@ class WordCompletion:
         self.submitted(save["id"], matches[0], expected)
 
     @staticmethod
+    def card_decks(cards):
+        """Capture validated card identities/decks with JSON-stable string keys."""
+        if not isinstance(cards, list) or not cards:
+            raise VerificationError("Could not read existing card decks; word retained")
+        decks = {}
+        for card in cards:
+            if not isinstance(card, dict):
+                raise VerificationError("Could not identify existing card decks; word retained")
+            card_id, deck = card.get("cardId"), card.get("deckName")
+            if (type(card_id) is not int or card_id <= 0 or not isinstance(deck, str)
+                    or not deck or str(card_id) in decks):
+                raise VerificationError("Could not identify existing card decks; word retained")
+            decks[str(card_id)] = deck
+        return decks
+
+    @staticmethod
     def compare(anki, note_id, expected):
         note = anki.get_note(note_id)
         if anki.last_error or not note or note.get("noteId") != note_id:
@@ -152,9 +168,14 @@ class WordCompletion:
             differences.append("missing tags")
         if set(expected.get("removeTags", [])) & tags:
             differences.append("tags not removed")
-        if expected.get("deckName"):
+        if "cardDecks" in expected or expected.get("deckName"):
             cards = anki.get_note_cards(note_id)
-            if anki.last_error or not cards or any(card.get("deckName") != expected["deckName"] for card in cards):
+            if anki.last_error or not cards:
+                differences.append("deck")
+            elif "cardDecks" in expected:
+                if WordCompletion.card_decks(cards) != expected["cardDecks"]:
+                    differences.append("card decks")
+            elif any(card.get("deckName") != expected["deckName"] for card in cards):
                 differences.append("deck")
         if differences:
             raise VerificationError(f"Note {note_id} verification failed: {', '.join(differences)}. Word retained.")
