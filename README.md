@@ -4,6 +4,9 @@ Lokalna aplikacja do tworzenia i edycji fiszek angielsko-polskich w Anki.
 Pobiera tlumaczenia i audio z Diki, zapisuje notatki przez AnkiConnect oraz
 pozwala wznawiac przerwane sesje.
 
+Dokumentacja projektu: [Project handbook](docs/index.md).
+Punkt wznowienia przegladu: [Walkthrough checkpoint](docs/review.md).
+
 ## Wymagania
 
 - Python 3.11+
@@ -96,7 +99,9 @@ wykonuje oczekujaca synchronizacje podczas zamykania.
 ## Usuwanie dodanych slow z listy
 
 Po zapisie aplikacja odczytuje notatke przez AnkiConnect po zwroconym `noteId`
-i porownuje typ, wyslane pola, wymagane/usuwane tagi oraz docelowa talie.
+i porownuje typ, wyslane pola, wymagane/usuwane tagi oraz talie kart. Nowe notatki
+trafiaja do wybranej talii; aktualizacja zachowuje dotychczasowa talie kazdej karty
+istniejacej notatki i sprawdza ja przy odczycie kontrolnym oraz ponowieniu zapisu.
 Dopiero po zgodnym odczycie usuwa wszystkie wystapienia potwierdzonego slowa
 z `words_to_add/words_to_add.txt`. Dotyczy to tworzenia, aktualizacji i custom
 cards. Zwykle pominiecie slowa nie usuwa go z pliku. Przy zmianie hasla usuwane
@@ -259,7 +264,7 @@ Ustawienie `DIKI_OFFLINE=1` w `.env` wylacza takze pobieranie przez proces tla.
 ### Weryfikacja bez sieci
 
 ```bash
-python -m unittest tests.test_diki_fetching tests.test_diki_resources tests.test_dikiApi tests.test_diki_meanings tests.test_diki_regression tests.test_audio_sync tests.test_review_stateless tests.test_target_selection tests.test_sync_rate_limit tests.test_session_storage tests.test_queue_diff
+python -m unittest tests.test_word_completion tests.test_diki_fetching tests.test_diki_resources tests.test_dikiApi tests.test_diki_meanings tests.test_diki_regression tests.test_audio_sync tests.test_review_stateless tests.test_target_selection tests.test_sync_rate_limit tests.test_session_storage tests.test_queue_diff
 ```
 
 Testy korzystaja z zapisanych stron i atrap HTTP/Anki. Dwa starsze testy live
@@ -270,7 +275,8 @@ Diki sa domyslnie pomijane (`RUN_LIVE_DIKI_TESTS=1` wlacza je jawnie).
 - `data/anki_flashcards_factory.sqlite3` - indeks notatek i sesje.
 - `data/diki_cache/` - HTML, MP3 i osobna baza metadanych, odstepow i postepu pobierania.
 - `words_to_add/words_to_add.txt` - opcjonalna lista slow do zaimportowania w kolejnosci linii.
-- `raw_notes/` - pliki dla starszego, terminalowego preprocessingu.
+- `raw_notes/`, `prepared_notes/` - przestarzaly preprocessing calych list;
+  glowny workflow sprawdza slowa pojedynczo. Wycofanie zapisano jako `L-001` w `to-do`.
 
 Starszy indeks JSON ustawiony przez `DATABASE_PATH` jest jednokrotnie
 importowany do SQLite przy pierwszym uruchomieniu.
