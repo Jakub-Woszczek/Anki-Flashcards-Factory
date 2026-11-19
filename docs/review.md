@@ -1,6 +1,24 @@
 # Project handbook walkthrough — checkpoint
 
-Last updated: 2026-11-17.
+Last updated: 2026-11-19.
+
+## Post-walkthrough implementation update — 2026-11-19
+
+The separately authorized deprecated-workflow cleanup is complete:
+`RawNotesEditor.py`, `raw_notes/`, and `prepared_notes/` (including their contents)
+were removed, along with their entry points and tests (`L-001`/`T-001`). The expanded
+approval also retired manual index-maintenance commands and scan helpers,
+`AnkiUtils`, direct-folder audio export and its tests, unused Anki creation/deck-moving
+wrappers, and dead helpers/attributes. Active browser index operations remain.
+See the [cleanup record](roadmap.md#completed-legacy-code-cleanup-2026-11-19).
+
+Full unittest discovery ran 107 tests with no failures and 2 opt-in live Diki tests
+skipped under a temporary socket-connection guard. The subsequent repository cleanup
+completed `T-002` with the committed `tools.test_offline` runner, shared quality
+command, hooks, CI, and guard regressions. Python modules were normalized and IDE
+artifacts untracked; application behavior remains unchanged. See
+[development tooling](development.md). No live collection or Diki requests were
+used for verification. The interview batches below remain historical evidence.
 
 ## Resume here
 
@@ -18,14 +36,13 @@ The owner prefers warning-and-continue for acknowledged note creation followed
 by failed follow-up confirmation, rather than blocking on read-back. Recorded as
 `S-001` for separate implementation; the current code is still stricter.
 The test boundary is confirmed: routine tests are offline with fixtures/fake Anki;
-real Anki/Diki checks are explicit integration actions. Enforcement is future task
-`T-002`. See [development and verification](development.md).
-The owner confirmed that the three initial live smoke tests may be deleted;
-their retirement is queued as `T-001`, following the documentation-only rule.
-That targeted retirement remains separate from enforcing the accepted boundary.
-Whole-list raw/prepared preprocessing is deprecated; the browser resolves words
-during processing, and dictionary CLI capture appends already compatible English
-entries. Retirement review is recorded as `L-001` for a separate session.
+real Anki/Diki checks are explicit integration actions. Current discovery passes
+offline after legacy-test retirement; `T-002` now enforces the standard runner. See
+[development and verification](development.md).
+The three initial live smoke tests and two retired scan-helper tests were removed
+in the separately authorized cleanup (`T-001`). Whole-list raw/prepared preprocessing
+was also removed (`L-001`); the browser resolves words during processing, and
+dictionary CLI capture appends already compatible English entries.
 Flags are now understood: the owner primarily sets them during
 Anki study for later attention; red/orange have the same practical meaning.
 See [marked-note review](features/marked-note-review.md).

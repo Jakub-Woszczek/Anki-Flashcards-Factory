@@ -5,8 +5,7 @@ from unittest.mock import Mock
 
 from bs4 import BeautifulSoup
 
-from external_APIs.dikiApi import DikiApi, parse_translations
-
+from external_apis.diki_api import DikiApi, parse_translations
 
 CASES_DIR = Path(__file__).parent / "diki_cases"
 

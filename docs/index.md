@@ -9,7 +9,7 @@ distinguish confirmed requirements, current behavior, open decisions, and gaps.
 - [Project purpose and scope](project.md): why the project exists, goals, and constraints.
 - [Feature map](features.md): capabilities, implementation state, and specification coverage.
 - [Architecture](architecture.md): local deployment, components, state ownership, and known mismatches.
-- [Development and verification](development.md): accepted offline test boundary, explicit integration checks, and current enforcement gaps.
+- [Development and verification](development.md): project-local checks, editor/hooks/CI, guarded offline tests, and explicit integration checks.
 - [Walkthrough checkpoint](review.md): current question and instructions for resuming the interview.
 
 ## Rules and reference

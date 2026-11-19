@@ -1,3 +1,4 @@
+from typing import Any
 from unittest import TestCase
 
 from backend.services import FactoryService
@@ -9,13 +10,13 @@ class FakeAnki:
     def __init__(self):
         self.sync_calls = 0
 
-    def sync(self):
+    def sync(self) -> bool:
         self.sync_calls += 1
         return True
 
 
 class FailingAnki(FakeAnki):
-    def sync(self):
+    def sync(self) -> bool:
         self.sync_calls += 1
         self.last_error = "AnkiWeb is unavailable"
         return False
@@ -23,7 +24,7 @@ class FailingAnki(FakeAnki):
 
 class TestSyncRateLimit(TestCase):
     def make_service(self, anki):
-        service = FactoryService.__new__(FactoryService)
+        service: Any = FactoryService.__new__(FactoryService)
         service.anki = anki
         self.now = 0.0
         service._sync_clock = lambda: self.now

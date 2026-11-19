@@ -1,6 +1,6 @@
 # LLM assistance for understanding words and translations
 
-Last updated: 2026-11-17.
+Last updated: 2026-11-19.
 
 Specification status: original purpose confirmed by the owner; future
 definition-related ideas are deferred for a separate discussion.
@@ -39,7 +39,7 @@ not specified an automatic per-word invocation or mandatory model approval.
 
 - `frontend/src/App.tsx`, `askGemini`, requests assistance through UI actions and
   displays the returned text.
-- `external_APIs/geminiAPI.py`, `word_translation_prompt`, asks for an
+- `external_apis/gemini_api.py`, `word_translation_prompt`, asks for an
   English-to-Polish translation and includes original Diki alternatives when
   available. It does not explicitly request an English definition.
 - `backend/services.py`, `gemini_review`, asks for comparison of an existing

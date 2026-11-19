@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from email.message import Message
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any, cast
 from unittest import TestCase
 from unittest.mock import Mock, patch
 
@@ -14,17 +15,21 @@ from requests.adapters import BaseAdapter
 from requests.exceptions import ConnectionError
 from urllib3.exceptions import ReadTimeoutError
 
-from external_APIs.diki_audio import DISCOVERY_VERSION, discover_audio_urls
-from external_APIs.diki_resources import (
-    RECOVERY_SUCCESSES, Blocked, Deferred, DikiResources,
-    DikiTimeout, NoAudio, file_lock,
+from external_apis.diki_api import DikiApi
+from external_apis.diki_audio import DISCOVERY_VERSION, discover_audio_urls
+from external_apis.diki_lists import WordList, coverage
+from external_apis.diki_resources import (
+    RECOVERY_SUCCESSES,
+    Blocked,
+    Deferred,
+    DikiResources,
+    DikiTimeout,
+    NoAudio,
+    file_lock,
 )
-from external_APIs.dikiApi import DikiApi
-from external_APIs.diki_lists import WordList, coverage
-from tests.test_diki_resources import Clock, HTML, MP3, response
+from tests.test_diki_resources import HTML, MP3, Clock, response
 from tools.diki_lookup import lookup_meanings, lookup_timeout
 from tools.diki_prefetch import run_batch
-
 
 CASES = Path(__file__).parent / "diki_cases"
 CHALLENGE = b"<title>Just a moment...</title><div>Verify you are human</div>"
@@ -36,62 +41,83 @@ class TestAdvertisedAudio(TestCase):
 
     def test_real_space_variant_does_not_select_synonym_or_sentence(self):
         html = self.fragment("eyepatch")
-        self.assertEqual(discover_audio_urls(html, "eyepatch"),
-                         ["https://www.diki.pl/images-common/en/mp3/eye_patch.mp3"])
-        self.assertEqual(discover_audio_urls(html, "eye patch"),
-                         ["https://www.diki.pl/images-common/en/mp3/eye_patch.mp3"])
-        self.assertEqual(discover_audio_urls(html, "patch"), [
-            "https://www.diki.pl/images-common/en/mp3/patch.mp3",
-            "https://www.diki.pl/images-common/en-ame/mp3/patch.mp3",
-        ])
+        self.assertEqual(
+            discover_audio_urls(html, "eyepatch"),
+            ["https://www.diki.pl/images-common/en/mp3/eye_patch.mp3"],
+        )
+        self.assertEqual(
+            discover_audio_urls(html, "eye patch"),
+            ["https://www.diki.pl/images-common/en/mp3/eye_patch.mp3"],
+        )
+        self.assertEqual(
+            discover_audio_urls(html, "patch"),
+            [
+                "https://www.diki.pl/images-common/en/mp3/patch.mp3",
+                "https://www.diki.pl/images-common/en-ame/mp3/patch.mp3",
+            ],
+        )
 
     def test_real_transcription_without_recording_has_no_guessed_urls(self):
         self.assertEqual(discover_audio_urls(self.fragment("revenant"), "revenant"), [])
 
     def test_real_inflection_is_not_confused_with_base_form(self):
         html = self.fragment("shone")
-        self.assertEqual(discover_audio_urls(html, "shone"),
-                         ["https://www.diki.pl/images-common/en/mp3/shone.mp3"])
-        self.assertEqual(discover_audio_urls(html, "shine"),
-                         ["https://www.diki.pl/images-common/en/mp3/shine.mp3"])
+        self.assertEqual(
+            discover_audio_urls(html, "shone"),
+            ["https://www.diki.pl/images-common/en/mp3/shone.mp3"],
+        )
+        self.assertEqual(
+            discover_audio_urls(html, "shine"),
+            ["https://www.diki.pl/images-common/en/mp3/shine.mp3"],
+        )
 
     def test_exact_spelling_precedes_space_variant_even_when_variant_is_british(self):
-        html = '''<div class="dictionaryEntity"><div class="hws">
+        html = """<div class="dictionaryEntity"><div class="hws">
             <span class="hw">eyepatch</span><span data-audio-url="/images-common/en-ame/mp3/eyepatch.mp3"></span>
             <br><span class="hw">eye patch</span><span data-audio-url="/images-common/en/mp3/eye_patch.mp3"></span>
-            </div></div>'''
-        self.assertEqual(discover_audio_urls(html, "eyepatch"), [
-            "https://www.diki.pl/images-common/en-ame/mp3/eyepatch.mp3",
-            "https://www.diki.pl/images-common/en/mp3/eye_patch.mp3",
-        ])
+            </div></div>"""
+        self.assertEqual(
+            discover_audio_urls(html, "eyepatch"),
+            [
+                "https://www.diki.pl/images-common/en-ame/mp3/eyepatch.mp3",
+                "https://www.diki.pl/images-common/en/mp3/eye_patch.mp3",
+            ],
+        )
 
     def test_hyphen_changes_and_unmatched_entries_are_not_spelling_variants(self):
-        html = '''<div class="dictionaryEntity"><div class="hws">
+        html = """<div class="dictionaryEntity"><div class="hws">
             <span class="hw">resign</span><br><span class="hw">re-sign</span>
             <span data-audio-url="/images-common/en/mp3/re-sign.mp3"></span>
-            </div></div>'''
+            </div></div>"""
         self.assertEqual(discover_audio_urls(html, "resign"), [])
         self.assertEqual(discover_audio_urls(html, "unrelated"), [])
 
     def test_nested_headwords_deduplicate_and_prefer_british(self):
-        html = '''<div class="dictionaryEntity"><div class="hws">
+        html = """<div class="dictionaryEntity"><div class="hws">
             <span class="hw">whatever floats <span class="stopword">one's</span> boat</span>
             <span><span data-audio-url="/images-common/en-ame/mp3/boat.mp3"></span>
             <span data-audio-url="/images-common/en/mp3/boat.mp3"></span>
             <span data-audio-url="/images-common/en/mp3/boat.mp3"></span></span>
-            </div></div>'''
-        self.assertEqual(discover_audio_urls(html, "whatever floats one's boat"), [
-            "https://www.diki.pl/images-common/en/mp3/boat.mp3",
-            "https://www.diki.pl/images-common/en-ame/mp3/boat.mp3",
-        ])
+            </div></div>"""
+        self.assertEqual(
+            discover_audio_urls(html, "whatever floats one's boat"),
+            [
+                "https://www.diki.pl/images-common/en/mp3/boat.mp3",
+                "https://www.diki.pl/images-common/en-ame/mp3/boat.mp3",
+            ],
+        )
 
     def test_remote_html_cannot_choose_arbitrary_hosts_or_paths(self):
-        for url in ["https://example.com/test.mp3", "//localhost/test.mp3",
-                    "http://www.diki.pl/images-common/en/mp3/take.mp3",
-                    "https://user:pass@www.diki.pl/images-common/en/mp3/take.mp3",
-                    "/images-common/en/mp3/%2e%2e%2ftake.mp3",
-                    "/images-common/en/mp3/take%0a.mp3", "https://[invalid",
-                    "/images-common/en/mp3/take.mp3?redirect=elsewhere"]:
+        for url in [
+            "https://example.com/test.mp3",
+            "//localhost/test.mp3",
+            "http://www.diki.pl/images-common/en/mp3/take.mp3",
+            "https://user:pass@www.diki.pl/images-common/en/mp3/take.mp3",
+            "/images-common/en/mp3/%2e%2e%2ftake.mp3",
+            "/images-common/en/mp3/take%0a.mp3",
+            "https://[invalid",
+            "/images-common/en/mp3/take.mp3?redirect=elsewhere",
+        ]:
             with self.subTest(url=url):
                 html = f'<div class="dictionaryEntity"><div class="hws"><span class="hw">take</span><span data-audio-url="{url}"></span></div></div>'
                 self.assertEqual(discover_audio_urls(html, "take"), [])
@@ -104,10 +130,16 @@ class TestFetchProfiles(TestCase):
         self.root = Path(self.directory.name)
         self.clock = Clock()
 
-    def resources(self, profile="background", **kwargs):
-        defaults = dict(profile=profile, clock=self.clock, sleep=self.clock.sleep,
-                        uniform=lambda low, high: (low + high) / 2, jitter=0,
-                        get=Mock(side_effect=lambda *args, **kwargs: response()))
+    def resources(self, profile="background", **kwargs) -> Any:
+        # Tests deliberately inspect the injected mock transport.
+        defaults: dict[str, Any] = {
+            "profile": profile,
+            "clock": self.clock,
+            "sleep": self.clock.sleep,
+            "uniform": lambda low, high: (low + high) / 2,
+            "jitter": 0,
+            "get": Mock(side_effect=lambda *args, **kwargs: response()),
+        }
         defaults.update(kwargs)
         result = DikiResources(self.root, **defaults)
         self.addCleanup(result.close)
@@ -184,9 +216,18 @@ class TestFetchProfiles(TestCase):
         self.assertEqual(resources.setting("request_counts"), {"challenge": 1, "rate_limited": 1})
 
     def test_diagnostics_keep_response_evidence_but_not_cookies_or_body(self):
-        resources = self.resources(get=Mock(return_value=response(CHALLENGE, headers={
-            "CF-Ray": "test-ray", "Content-Type": "text/html", "Set-Cookie": "secret=value",
-        })))
+        resources = self.resources(
+            get=Mock(
+                return_value=response(
+                    CHALLENGE,
+                    headers={
+                        "CF-Ray": "test-ray",
+                        "Content-Type": "text/html",
+                        "Set-Cookie": "secret=value",
+                    },
+                )
+            )
+        )
         with self.assertRaises(Blocked):
             resources.fetch_html("take")
         event = resources.setting("last_request")
@@ -201,7 +242,9 @@ class TestFetchProfiles(TestCase):
 
     def test_streamed_read_timeout_is_not_a_global_connection_failure(self):
         result = response()
-        result.iter_content = Mock(side_effect=ConnectionError(ReadTimeoutError(None, "/", "read timed out")))
+        result.iter_content = Mock(
+            side_effect=ConnectionError(ReadTimeoutError(cast(Any, None), "/", "read timed out"))
+        )
         resources = self.resources(get=Mock(return_value=result))
         with self.assertRaisesRegex(DikiTimeout, "response body stalled"):
             resources.fetch_html("take")
@@ -216,7 +259,9 @@ class TestFetchProfiles(TestCase):
         self.assertEqual(resources.setting("cooldown_until", 0), 0)
 
     def test_challenge_response_retry_after_can_extend_the_pause(self):
-        resources = self.resources(get=Mock(return_value=response(CHALLENGE, headers={"Retry-After": "90000"})))
+        resources = self.resources(
+            get=Mock(return_value=response(CHALLENGE, headers={"Retry-After": "90000"}))
+        )
         with self.assertRaises(Blocked):
             resources.fetch_html("take")
         self.assertEqual(resources.setting("cooldown_until"), self.clock() + 90000)
@@ -230,7 +275,9 @@ class TestFetchProfiles(TestCase):
             db.execute("INSERT INTO settings VALUES ('cooldown_reason','\"Old challenge\"')")
             db.execute("""INSERT INTO resources(word,kind,state,error,attempts,retry_at)
                 VALUES ('old-error','html','error','Old timeout',3,5000)""")
-            db.execute("INSERT INTO resources(word,kind,state,cursor) VALUES ('eyepatch','audio','no_audio',6)")
+            db.execute(
+                "INSERT INTO resources(word,kind,state,cursor) VALUES ('eyepatch','audio','no_audio',6)"
+            )
         interactive = self.resources("interactive")
         background = self.resources()
         self.assertEqual(interactive.setting("cooldown_until", 0), 0)
@@ -253,39 +300,53 @@ class TestFetchProfiles(TestCase):
 
     def test_each_word_finishes_html_and_audio_before_next_word(self):
         def get(url, **kwargs):
-            return response(MP3 if "/mp3/" in url else HTML.replace(b"take", b"other")
-                            if "q=other" in url else HTML)
+            return response(
+                MP3
+                if "/mp3/" in url
+                else HTML.replace(b"take", b"other")
+                if "q=other" in url
+                else HTML
+            )
 
         resources = self.resources(get=Mock(side_effect=get))
         result = run_batch(resources, [WordList("main.txt", ["take", "other"], 2)])
         self.assertEqual(result["status"], "complete")
-        self.assertEqual([call.args[0] for call in resources.get.call_args_list], [
-            "https://www.diki.pl/slownik-angielskiego?q=take",
-            "https://www.diki.pl/images-common/en/mp3/take.mp3",
-            "https://www.diki.pl/slownik-angielskiego?q=other",
-            "https://www.diki.pl/images-common/en/mp3/other.mp3",
-        ])
+        self.assertEqual(
+            [call.args[0] for call in resources.get.call_args_list],
+            [
+                "https://www.diki.pl/slownik-angielskiego?q=take",
+                "https://www.diki.pl/images-common/en/mp3/take.mp3",
+                "https://www.diki.pl/slownik-angielskiego?q=other",
+                "https://www.diki.pl/images-common/en/mp3/other.mp3",
+            ],
+        )
 
     def test_legacy_no_audio_is_reconsidered_using_cached_html_only(self):
         resources = self.resources(get=Mock(return_value=response(MP3)))
         html = (CASES / "audio-eyepatch.html").read_bytes()
         resources._save("eyepatch", "html", html, 200, "fixture", True)
         with resources.db() as db:
-            db.execute("INSERT INTO resources(word,kind,state,cursor) VALUES ('eyepatch','audio','no_audio',6)")
+            db.execute(
+                "INSERT INTO resources(word,kind,state,cursor) VALUES ('eyepatch','audio','no_audio',6)"
+            )
         self.assertEqual(resources.fetch_audio("eyepatch"), MP3)
         resources.get.assert_called_once()
         self.assertTrue(resources.get.call_args.args[0].endswith("/eye_patch.mp3"))
 
     def test_absent_recording_is_shared_and_revisited_after_html_changes(self):
         resources = self.resources()
-        resources._save("revenant", "html", (CASES / "audio-revenant.html").read_bytes(), 200, "fixture", True)
+        resources._save(
+            "revenant", "html", (CASES / "audio-revenant.html").read_bytes(), 200, "fixture", True
+        )
         with self.assertRaises(NoAudio):
             resources.fetch_audio("revenant")
         resources.get.assert_not_called()
         other = self.resources("interactive", offline=True)
         with self.assertRaises(NoAudio):
             other.fetch_audio("revenant")
-        resources._save("revenant", "html", HTML.replace(b"take", b"revenant"), 200, "fixture", True)
+        resources._save(
+            "revenant", "html", HTML.replace(b"take", b"revenant"), 200, "fixture", True
+        )
         resources.get.side_effect = None
         resources.get.return_value = response(MP3)
         self.assertEqual(resources.fetch_audio("revenant"), MP3)
@@ -324,7 +385,10 @@ class TestFetchProfiles(TestCase):
             resources._save("take", "html", content, 200, "fixture", True)
 
         with ThreadPoolExecutor(max_workers=2) as executor:
-            futures = [executor.submit(save, first, HTML), executor.submit(save, second, HTML + b"<!-- newer -->")]
+            futures = [
+                executor.submit(save, first, HTML),
+                executor.submit(save, second, HTML + b"<!-- newer -->"),
+            ]
             for future in futures:
                 future.result(timeout=5)
         self.assertIn(first.fetch_html("take").encode(), [HTML, HTML + b"<!-- newer -->"])
@@ -333,11 +397,12 @@ class TestFetchProfiles(TestCase):
 
 class CookieAdapter(BaseAdapter):
     """Exercise real Requests cookie preparation/extraction, without the network."""
+
     def __init__(self):
         self.requests = []
         self.closed = False
 
-    def send(self, request, **kwargs):
+    def send(self, request, stream=False, timeout=None, verify=True, cert=None, proxies=None):
         self.requests.append(request)
         result = response()
         result.request = request
@@ -377,9 +442,11 @@ class TestSessionAndCliDeadline(TestCase):
         with tempfile.TemporaryDirectory() as directory:
             with DikiResources(directory, get=Mock(return_value=result)) as resources:
                 api = DikiApi(resources)
-                with patch("tools.diki_lookup.lookup_timeout", side_effect=lambda: lookup_timeout(0.03)):
+                with patch(
+                    "tools.diki_lookup.lookup_timeout", side_effect=lambda: lookup_timeout(0.03)
+                ):
                     self.assertEqual(lookup_meanings(api, "take"), [])
-                self.assertIn("timed out", api.last_error)
+                self.assertIn("timed out", cast(str, api.last_error))
                 self.assertEqual(resources.setting("last_request")["outcome"], "timeout")
                 result.close.assert_called_once()
                 self.assertEqual(signal.getsignal(signal.SIGALRM), previous)
@@ -391,5 +458,5 @@ class TestSessionAndCliDeadline(TestCase):
                 with file_lock(resources.request_lock):
                     with self.assertRaisesRegex(DikiTimeout, "timed out"), lookup_timeout(0.03):
                         resources.fetch_html("take")
-                resources.get.assert_not_called()
+                cast(Mock, resources.get).assert_not_called()
                 self.assertIsNone(resources.metadata("take", "html"))

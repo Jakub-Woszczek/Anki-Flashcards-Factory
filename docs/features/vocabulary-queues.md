@@ -1,6 +1,6 @@
 # Vocabulary sources and queue lifecycle
 
-Last updated: 2026-11-17.
+Last updated: 2026-11-19.
 
 Specification status: source-file authority, core lifecycle, per-entry evaluation,
 and optional draft recovery confirmed. Draft removal is a possible simplification;
@@ -109,7 +109,7 @@ The owner previously entered words manually, including forms that were not Diki
 headwords. A separate raw/prepared-list stage resolved those forms to compatible
 English entries before note creation.
 
-That stage is deprecated. The preferred browser flow vets the current word and
+That stage was retired on 2026-11-19. The browser flow vets the current word and
 offers spelling/entry choices as it is processed, rather than preparing the whole
 list first. The dictionary CLI already performs lookup/selection before appending,
 so CLI-captured English entries are Diki-compatible input.
@@ -117,7 +117,8 @@ so CLI-captured English entries are Diki-compatible input.
 This does not claim that every historical/manual/book entry is already compatible,
 or establish Polish field compatibility before translations have been selected.
 The current word-processing path still needs to handle unresolved source entries.
-Legacy retirement is a separate `L-001` task; see the [roadmap](../roadmap.md).
+The code, CLI entry point, obsolete tests, and raw/prepared vocabulary directories
+were removed as `L-001`; see the [roadmap](../roadmap.md#completed-legacy-code-cleanup-2026-11-19).
 
 ### Current browser-session behavior — implementation mismatch
 
@@ -179,8 +180,8 @@ settings is not decided by this answer; do not generalize it to all storage.
 | Session persistence | Stores ordered words separately in SQLite; source is a string, not an established editable-file association | `backend/storage.py`, `create_add_session` |
 | Verified cleanup | After Anki read-back, archives and removes matches from the configured main list | `backend/word_completion.py` |
 | Resolution order | Browser service checks for an existing Anki note using the submitted word before fetching Diki HTML | `backend/services.py`, `lookup_current` |
-| Diki lookup | Returns exact-headword translation groups or suggestions; does not expose a separate resolved canonical-word result | `external_APIs/dikiApi.py`, `lookup` and `parse_meanings` |
-| Book lists | Text files are discovered for offline preparation without source modification | `external_APIs/diki_lists.py` |
+| Diki lookup | Returns exact-headword translation groups or suggestions; does not expose a separate resolved canonical-word result | `external_apis/diki_api.py`, `lookup` and `parse_meanings` |
+| Book lists | Text files are discovered for offline preparation without source modification | `external_apis/diki_lists.py` |
 | Generic skip | Advances the browser queue without touching the source file | `backend/services.py`, `skip_current` |
 
 Relevant regression evidence inspected in

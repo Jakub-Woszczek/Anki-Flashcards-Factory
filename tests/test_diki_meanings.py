@@ -2,8 +2,8 @@ from pathlib import Path
 from unittest import TestCase
 from unittest.mock import Mock
 
-from external_APIs.dikiApi import DikiApi, parse_meanings, parse_translations
-from external_APIs.diki_resources import ResourceError
+from external_apis.diki_api import DikiApi, parse_meanings, parse_translations
+from external_apis.diki_resources import ResourceError
 
 
 class TestDikiMeanings(TestCase):
@@ -13,25 +13,38 @@ class TestDikiMeanings(TestCase):
     def test_examples_belong_to_their_meaning_and_exclude_additional_sentences(self):
         meanings = parse_meanings(self.html, " TAKE ")
         self.assertEqual(len(meanings), 4)
-        self.assertEqual(meanings[0], {
-            "translations": ["brać", "zabierać"],
-            "examples": [
-                {"english": "Take my hand and say that you love me.",
-                 "polish": "Weź mnie za rękę i powiedz, że mnie kochasz."},
-                {"english": "I'll take the dog for a walk.", "polish": "Wezmę psa na spacer."},
+        self.assertEqual(
+            meanings[0],
+            {
+                "translations": ["brać", "zabierać"],
+                "examples": [
+                    {
+                        "english": "Take my hand and say that you love me.",
+                        "polish": "Weź mnie za rękę i powiedz, że mnie kochasz.",
+                    },
+                    {"english": "I'll take the dog for a walk.", "polish": "Wezmę psa na spacer."},
+                ],
+            },
+        )
+        self.assertEqual(
+            meanings[1]["examples"],
+            [
+                {
+                    "english": "I decided to take the job.",
+                    "polish": "Zdecydowałem się wziąć tę pracę.",
+                },
             ],
-        })
-        self.assertEqual(meanings[1]["examples"], [
-            {"english": "I decided to take the job.", "polish": "Zdecydowałem się wziąć tę pracę."},
-        ])
+        )
         self.assertEqual(meanings[2]["examples"], [])
         self.assertEqual(len(meanings[3]["examples"]), 1)
         self.assertEqual(sum(len(meaning["examples"]) for meaning in meanings), 4)
 
     def test_translation_only_contract_is_preserved(self):
         expected = [
-            ["brać", "zabierać"], ["przyjmować", "akceptować"],
-            ["zabierać", "podwozić (np. kogoś do domu)"], ["ujęcie (podczas kręcenia filmu)"],
+            ["brać", "zabierać"],
+            ["przyjmować", "akceptować"],
+            ["zabierać", "podwozić (np. kogoś do domu)"],
+            ["ujęcie (podczas kręcenia filmu)"],
         ]
         self.assertEqual(parse_translations(self.html, "take"), expected)
         resources = Mock()
@@ -51,14 +64,17 @@ class TestDikiMeanings(TestCase):
         self.assertEqual(api.last_error, "Offline and not cached")
 
     def test_nested_text_and_missing_translation(self):
-        html = '''<div class="dictionaryEntity"><div class="hws"><span class="hw">take</span></div>
+        html = """<div class="dictionaryEntity"><div class="hws"><span class="hw">take</span></div>
         <ol class="foreignToNativeMeanings"><li><span class="hw">brać</span>
         <div class="exampleSentence">Take <b>my hand</b> &amp; go.
           <span class="exampleSentenceTranslation">(Weź <b>mnie</b> (teraz) za rękę.)</span>
         </div><div class="exampleSentence">Take care!</div>
-        </li></ol></div>'''
-        self.assertEqual(parse_meanings(html, "take")[0]["examples"], [
-            {"english": "Take my hand & go.", "polish": "Weź mnie (teraz) za rękę."},
-            {"english": "Take care!", "polish": ""},
-        ])
+        </li></ol></div>"""
+        self.assertEqual(
+            parse_meanings(html, "take")[0]["examples"],
+            [
+                {"english": "Take my hand & go.", "polish": "Weź mnie (teraz) za rękę."},
+                {"english": "Take care!", "polish": ""},
+            ],
+        )
         self.assertEqual(parse_meanings(html, "take it"), [])

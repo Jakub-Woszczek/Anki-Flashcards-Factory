@@ -59,7 +59,9 @@ class SessionStore:
                 """
             )
 
-    def create_add_session(self, words: list[str], source: str, name: str | None = None) -> dict[str, Any]:
+    def create_add_session(
+        self, words: list[str], source: str, name: str | None = None
+    ) -> dict[str, Any]:
         cleaned_words = [word.strip() for word in words if word.strip()]
         session_id = str(uuid.uuid4())
         now = utc_now()
@@ -105,7 +107,9 @@ class SessionStore:
 
     def get_session(self, session_id: str) -> dict[str, Any]:
         with self._connect() as connection:
-            row = connection.execute("SELECT * FROM sessions WHERE id = ?", (session_id,)).fetchone()
+            row = connection.execute(
+                "SELECT * FROM sessions WHERE id = ?", (session_id,)
+            ).fetchone()
             if row is None:
                 raise KeyError(session_id)
             queue_rows = connection.execute(

@@ -1,5 +1,6 @@
 from unittest import TestCase
-from external_APIs.geminiAPI import GeminiBot
+
+from external_apis.gemini_api import GeminiBot
 
 
 class TestGeminiBot(TestCase):

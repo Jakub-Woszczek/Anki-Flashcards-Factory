@@ -4,18 +4,12 @@ from collections import Counter
 
 import requests
 
-
 REQUEST_TIMEOUT_SECONDS = 15
 
 
 class AnkiConnect:
     def __init__(self):
-        self.test_card = 1755110613536
-        # self.notes_improvement = NotesImprovement()
-        self.MISSPELL_LABEL = "MISSPELL"
-        self.images_folder_path = os.getenv("ANKI_MEDIA_FOLDER_PATH")
         self.anki_URL = os.getenv("ANKI_URL", "http://127.0.0.1:8765")
-        self.anki_base_deck_path = os.getenv("ANKI_BASE_DECK_PATH")
         self.last_error = None
 
     def invoke(self, action, **params):
@@ -54,17 +48,6 @@ class AnkiConnect:
         """Synchronize the active Anki profile with AnkiWeb."""
         self.invoke("sync")
         return self.last_error is None
-
-    def harness_cards_content(self, notes_ids):
-        """
-        Collects data about notes
-        :param notes_ids: Array of notes ids
-        :return: List of dictionaries about each note
-        """
-        notes_list = self.invoke("notesInfo", notes=notes_ids)
-        if notes_list:
-            return notes_list
-        return None
 
     def update_note_fields(self, note_id, fields: dict):
         """
@@ -109,77 +92,9 @@ class AnkiConnect:
 
     def store_media_file(self, filename: str, content: bytes):
         """Store audio in the media folder of Anki's active profile."""
-        return self.invoke("storeMediaFile", filename=filename, data=b64encode(content).decode("ascii"))
-
-    def add_flashcard(
-        self, english_word, pl_translation, audio_en, deck=None, tags=None
-    ):
-        if deck == None:
-            print("Nie podano talii")
-            return None
-
-        assert type(english_word) == str
-        assert type(pl_translation) == str
-        assert type(deck) == str
-
-        tags = tags or []
-        assert isinstance(tags, list)
-
-        return self.add_note(
-            deck,
-            "Basic [reverse+audio]",
-            {
-                "en_word": english_word,
-                "pl_translation": pl_translation,
-                "audio_en": audio_en,
-            },
-            tags,
+        return self.invoke(
+            "storeMediaFile", filename=filename, data=b64encode(content).decode("ascii")
         )
-
-    def move_note_to_deck(self, note_id: int, new_deck: str):
-        """
-        Przenieś wszystkie karty z danej notatki do innej talii.
-        :param note_id: ID notatki
-        :param new_deck: docelowa talia
-        """
-        try:
-            cards = self.invoke("findCards", query=f"nid:{note_id}")
-            if not cards:
-                print(f"❌ Brak kart dla notatki {note_id}")
-                return None
-
-            result = self.invoke("changeDeck", cards=cards, deck=new_deck)
-            print(f"✅ Transfer complete")
-            return result
-        except Exception as e:
-            print(f"transfer ERROR {note_id}: {e}")
-            return None
-
-    def get_subdecks(self):
-        """
-        Returns list of subdecks of supreme deck (ANKI_BASE_DECK_PATH).
-        """
-        if not self.anki_base_deck_path:
-            return []
-        all_decks = self.invoke("deckNames") or []
-        deck_names = [
-            d
-            for d in all_decks
-            if d.startswith(
-                self.anki_base_deck_path + "::"
-            )  # Checks if is subdeck of supreme deck
-            and any(char.isdigit() for char in d)
-            and "C2" not in d  # I have in my supreme deck some additional decks that I
-        ]  # want to exclude, and they don't have digits in their names
-
-        return deck_names
-
-    def notes_ids_from_deck(self, deck_name):
-        query = f"deck:{deck_name}"
-        r = self.invoke("findNotes", query=query)
-        if r is None:
-            raise ValueError(f"Nie znaleziono notatek w talii {deck_name}")
-        return r
 
     def get_note(self, note_id: int):
         notes = self.invoke("notesInfo", notes=[note_id])
@@ -231,26 +146,18 @@ class AnkiConnect:
 
     def deck_models(self, deck_name: str):
         card_ids = self.invoke("findCards", query=f'deck:"{deck_name}"') or []
-        return sorted({card.get("modelName") for card in self.cards_info(card_ids) if card.get("modelName")})
+        return sorted(
+            {card.get("modelName") for card in self.cards_info(card_ids) if card.get("modelName")}
+        )
 
     def deck_model_counts(self, deck_name: str):
         card_ids = self.invoke("findCards", query=f'deck:"{deck_name}"') or []
         counts = Counter(
-            card.get("modelName")
-            for card in self.cards_info(card_ids)
-            if card.get("modelName")
+            card.get("modelName") for card in self.cards_info(card_ids) if card.get("modelName")
         )
         return [
-            {"name": model_name, "count": count}
-            for model_name, count in sorted(counts.items())
+            {"name": model_name, "count": count} for model_name, count in sorted(counts.items())
         ]
-
-    def change_note_deck(self, note_id: int, deck_name: str):
-        card_ids = self.invoke("findCards", query=f"nid:{note_id}") or []
-        if not card_ids:
-            self.last_error = f"No cards found for note {note_id}"
-            return None
-        return self.invoke("changeDeck", cards=card_ids, deck=deck_name)
 
     def set_card_flag(self, card_id: int, flag: int):
         """Use AnkiConnect's undocumented card field setter when available."""
@@ -270,11 +177,11 @@ class AnkiConnect:
     def set_note_cards_flag(self, note_id: int, flag: int):
         card_ids = self.invoke("findCards", query=f"nid:{note_id}")
         if self.last_error:
-            return None
+            return
         if not card_ids:
             self.last_error = f"No cards found for note {note_id}"
-            return None
+            return
         for card_id in card_ids:
             self.set_card_flag(card_id, flag)
             if self.last_error:
-                return None
+                return

@@ -1,0 +1,28 @@
+[tool.ruff]
+required-version = "==0.17.5"
+target-version = "py311"
+line-length = 100
+include = ["*.py", "*.pyi", "pyproject.toml"]
+extend-exclude = [".ankiFac", ".ankiFact", "cloudflare", "data"]
+
+[tool.ruff.lint]
+# Correctness, imports, and conservative modern-Python/style checks.
+select = ["E4", "E7", "E9", "F", "I", "UP", "B", "C4", "SIM", "RET", "RUF010", "TRY004", "BLE001"]
+
+[tool.ruff.lint.per-file-ignores]
+# Keep fixture lifetimes and expected-failure contexts visually distinct.
+"tests/*.py" = ["SIM117"]
+
+[tool.pyright]
+include = ["main.py", "backend", "external_apis", "tools", "tests"]
+exclude = ["**/__pycache__", ".ankiFac", ".ankiFact", "cloudflare", "data"]
+pythonVersion = "3.11"
+pythonPlatform = "Darwin"
+typeCheckingMode = "standard"
+# Match the useful unused-code diagnostics enabled in the owner's editor.
+reportUnusedImport = "error"
+reportUnusedVariable = "error"
+reportUnusedFunction = "error"
+reportUnusedClass = "error"
+reportUnusedExpression = "error"
+reportUnusedCoroutine = "error"

@@ -1,5 +1,6 @@
 import tempfile
 from pathlib import Path
+from typing import Any
 
 from backend.word_completion import WordCompletion
 
@@ -15,6 +16,7 @@ def install_completion(test, service):
 
 class ReadBackAnki:
     note_id = 99
+    call: tuple[Any, ...]
 
     def invoke(self, action, **_params):
         assert action == "getActiveProfile"
@@ -22,9 +24,12 @@ class ReadBackAnki:
 
     def get_note(self, note_id):
         assert note_id == self.note_id
-        return {"noteId": note_id, "modelName": self.call[1],
-                "fields": {name: {"value": value} for name, value in self.call[2].items()},
-                "tags": self.call[3] if len(self.call) > 3 else []}
+        return {
+            "noteId": note_id,
+            "modelName": self.call[1],
+            "fields": {name: {"value": value} for name, value in self.call[2].items()},
+            "tags": self.call[3] if len(self.call) > 3 else [],
+        }
 
     def get_note_cards(self, _note_id):
         return [{"deckName": self.call[0]}]

@@ -1,3 +1,4 @@
+from typing import Any
 from unittest import TestCase
 
 from backend.services import FactoryService
@@ -5,7 +6,7 @@ from backend.services import FactoryService
 
 class TestQueueDiff(TestCase):
     def test_queue_diff_returns_only_changed_lines_in_separate_hunks(self):
-        service = FactoryService.__new__(FactoryService)
+        service: Any = FactoryService.__new__(FactoryService)
         service.session = lambda _session_id: {
             "mode": "add",
             "queue": [{"word": "first"}, {"word": "second"}, {"word": "third"}],

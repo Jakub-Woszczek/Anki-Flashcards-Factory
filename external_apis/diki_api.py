@@ -1,11 +1,8 @@
-import os
-import re
-from pathlib import Path
-from typing import TypedDict
+from typing import TypedDict, cast
 
 from bs4 import BeautifulSoup
 
-from external_APIs.diki_resources import DikiResources, ResourceError
+from external_apis.diki_resources import DikiResources, ResourceError
 
 
 class SentenceExample(TypedDict):
@@ -21,9 +18,7 @@ class Meaning(TypedDict):
 class DikiApi:
     def __init__(self, resources=None):
         self.resources = resources if resources is not None else DikiResources()
-        self.audio_path = os.getenv("ANKI_MEDIA_FOLDER_PATH")
         self.last_error = None
-        self.last_audio_path = None
 
     def possible_spellings(self, phrase) -> set:
         """
@@ -77,31 +72,9 @@ class DikiApi:
             # Szukamy wszystkich linków <a> w tym divie
             links = suggestions_div.find_all("a")
             for link in links:
-                suggestions.add((link.get_text()))
+                suggestions.add(link.get_text())
 
         return suggestions
-
-    def diki_audio_harness(self, phrase, audio_path=None):
-        """Compatibility export for terminal callers; downloads use the shared cache."""
-        self.last_error = None
-        self.last_audio_path = None
-        try:
-            content = self.fetch_audio(phrase)
-            target = self.resources.path(phrase, "audio")
-            destination = audio_path if audio_path is not None else self.audio_path
-            if destination:
-                directory = Path(destination).expanduser()
-                if not directory.is_absolute():
-                    directory = Path(__file__).parent / directory
-                directory.mkdir(parents=True, exist_ok=True)
-                safe_phrase = re.sub(r'[<>:"/\\|?*\0]', "", phrase).strip(". ")
-                target = directory / f"{safe_phrase or 'pronunciation'}.mp3"
-                target.write_bytes(content)
-            self.last_audio_path = str(target)
-            return True
-        except (ResourceError, OSError) as error:
-            self.last_error = str(error)
-            return False
 
     def fetch_audio(self, phrase) -> bytes:
         return self.resources.fetch_audio(phrase)
@@ -175,7 +148,6 @@ def parse_meanings(html: str, phrase: str) -> list[Meaning]:
     all_meanings = []
 
     for entity in entities:
-
         header_section = entity.find("div", class_="hws")
         if not header_section:
             continue
@@ -198,10 +170,9 @@ def parse_meanings(html: str, phrase: str) -> list[Meaning]:
         )  # Szukam wszystkich znaczeń
         for m_list in meanings_list:
             for li in m_list.find_all("li", recursive=False):
-
                 current_row_meanings = []
                 for child in li.find_all("span", recursive=False):
-                    classes = child.get("class", [])
+                    classes = cast(list[str] | str, child.attrs.get("class", []))
                     if "hw" in classes:
                         spans = [child]
                     elif "hiddenNotForChildrenMeaning" in classes:
@@ -209,8 +180,7 @@ def parse_meanings(html: str, phrase: str) -> list[Meaning]:
                     else:
                         spans = []
                     current_row_meanings.extend(
-                        " ".join(span.get_text(separator=" ", strip=True).split())
-                        for span in spans
+                        " ".join(span.get_text(separator=" ", strip=True).split()) for span in spans
                     )
 
                 if current_row_meanings:
@@ -233,15 +203,11 @@ def parse_meanings(html: str, phrase: str) -> list[Meaning]:
                         english = " ".join(example.get_text(" ", strip=True).split())
                         if english:
                             examples.append({"english": english, "polish": polish})
-                    all_meanings.append({
-                        "translations": current_row_meanings,
-                        "examples": examples,
-                    })
+                    all_meanings.append(
+                        {
+                            "translations": current_row_meanings,
+                            "examples": examples,
+                        }
+                    )
 
     return all_meanings
-
-
-def prepare_phrase_to_url(phase):
-    phase = phase.strip().lower()
-    words = phase.split(" ")
-    return "+".join(words)

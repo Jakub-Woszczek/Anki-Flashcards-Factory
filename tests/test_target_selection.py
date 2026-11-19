@@ -1,7 +1,8 @@
+from typing import Any
 from unittest import TestCase
 
 from backend.services import FactoryService
-from external_APIs.diki_resources import NoAudio
+from external_apis.diki_resources import NoAudio
 from tests.completion_helpers import ReadBackAnki, install_completion
 
 
@@ -122,7 +123,7 @@ class FakeNoAudioDiki:
 
 class TestTargetSelection(TestCase):
     def test_deck_tree_nests_anki_deck_paths(self):
-        service = FactoryService.__new__(FactoryService)
+        service: Any = FactoryService.__new__(FactoryService)
         service.anki = FakeAnki()
 
         self.assertEqual(
@@ -172,7 +173,7 @@ class TestTargetSelection(TestCase):
         self.assertEqual(session["modelName"], "Basic")
 
     def test_anki_duplicate_repairs_a_missing_local_index_entry(self):
-        service = FactoryService.__new__(FactoryService)
+        service: Any = FactoryService.__new__(FactoryService)
         service.anki = FakeDuplicateAnki()
         service.notes = FakeIndex()
 
@@ -196,7 +197,7 @@ class TestTargetSelection(TestCase):
         )
 
     def test_custom_card_uses_all_schema_fields_and_advances_the_queue(self):
-        service = FactoryService.__new__(FactoryService)
+        service: Any = FactoryService.__new__(FactoryService)
         install_completion(self, service)
         service.anki = FakeCustomCardAnki()
         service.notes = FakeIndex()
@@ -214,14 +215,20 @@ class TestTargetSelection(TestCase):
             {"Front": "streamline", "Back": "custom meaning"},
         )
 
-        self.assertEqual(service.anki.call, ("English::test", "Basic", {"Front": "streamline", "Back": "custom meaning"}))
+        self.assertEqual(
+            service.anki.call,
+            ("English::test", "Basic", {"Front": "streamline", "Back": "custom meaning"}),
+        )
         with service.completions.connect() as db:
-            self.assertEqual(tuple(db.execute("SELECT note_id,en_word FROM note_index").fetchone()), (99, "streamline"))
+            self.assertEqual(
+                tuple(db.execute("SELECT note_id,en_word FROM note_index").fetchone()),
+                (99, "streamline"),
+            )
         self.assertEqual(service.sessions.completed, "session-1")
         self.assertEqual(result["noteId"], 99)
 
     def test_suspending_a_duplicate_note_advances_the_queue(self):
-        service = FactoryService.__new__(FactoryService)
+        service: Any = FactoryService.__new__(FactoryService)
         service.anki = FakeDuplicateActionAnki()
         service.sessions = FakeDuplicateActionSessions()
         service.session = lambda _session_id: {
@@ -237,7 +244,7 @@ class TestTargetSelection(TestCase):
         self.assertEqual(result["action"], "suspended duplicate")
 
     def test_deleting_a_duplicate_note_clears_the_local_index_and_draft(self):
-        service = FactoryService.__new__(FactoryService)
+        service: Any = FactoryService.__new__(FactoryService)
         service.anki = FakeDuplicateActionAnki()
         service.notes = FakeDuplicateActionIndex()
         service.sessions = FakeDuplicateActionSessions()
@@ -251,11 +258,13 @@ class TestTargetSelection(TestCase):
 
         self.assertEqual(service.anki.deleted_note_id, 99)
         self.assertEqual(service.notes.deleted_words, ["streamline"])
-        self.assertEqual(service.sessions.replaced, ("session-1", {"word": "streamline", "existingNoteId": None}))
+        self.assertEqual(
+            service.sessions.replaced, ("session-1", {"word": "streamline", "existingNoteId": None})
+        )
         self.assertEqual(result["action"], "deleted duplicate")
 
     def test_creating_a_note_flags_every_generated_card(self):
-        service = FactoryService.__new__(FactoryService)
+        service: Any = FactoryService.__new__(FactoryService)
         install_completion(self, service)
         service.anki = FakeFlaggedCreateAnki()
         service.notes = FakeIndex()

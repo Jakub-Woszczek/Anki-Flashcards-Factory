@@ -1,6 +1,6 @@
 # Diki: content identity and curation contract
 
-Last updated: 2026-11-17.
+Last updated: 2026-11-19.
 
 Specification status: English headword and Polish selection compatibility goals,
 acceptable alternate headwords, human selection, and the missing-entry
@@ -61,10 +61,10 @@ before appending the English word. That input is already Diki-compatible in the
 English sense. Manual/book/historical inputs can still need resolution.
 
 The browser's per-word lookup and spelling choices supersede the old whole-list
-raw/prepared preprocessing workflow, which is deprecated. Vet the current word
-as it is processed; no separate pre-vetted full list is required by the owner.
-See [vocabulary source rules](../features/vocabulary-queues.md) and retirement
-task `L-001` in [to-do](../../to-do).
+raw/prepared preprocessing workflow, which was removed on 2026-11-19. Vet the current
+word as it is processed; no separate pre-vetted full list is required by the owner.
+See [vocabulary source rules](../features/vocabulary-queues.md) and completed
+retirement `L-001` in [to-do](../../to-do).
 
 ### Confirmed example: `causes` → `cause`
 
@@ -229,7 +229,7 @@ British-first arose from the original implementation: the owner manually inspect
 some pages, found British recordings commonly available, and used American audio
 as a fallback. It was not a deliberate dialect preference or a hard product rule.
 
-The current `external_APIs/diki_audio.py` selector can retain its ordering: exact
+The current `external_apis/diki_audio.py` selector can retain its ordering: exact
 spelling, then space-only variants, with British before American within each tier.
 That is observed fallback behavior, not an acceptance criterion requiring British
 speech. No chooser, dialect setting, or change to selection order was requested.
@@ -271,7 +271,7 @@ confirmed goals, observed mechanics, and existing-note coverage gap.
 
 ## Implementation evidence and gaps
 
-- [`external_APIs/dikiApi.py`](../../external_APIs/dikiApi.py), `lookup`, returns
+- [`external_apis/diki_api.py`](../../external_apis/diki_api.py), `lookup`, returns
   translation groups or suggestions, without a separate resolved-headword field.
 - `parse_meanings` accepts entities whose header contains the normalized requested
   phrase. It does not independently resolve every inflection to a different

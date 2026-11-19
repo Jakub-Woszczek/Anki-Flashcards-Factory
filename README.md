@@ -30,13 +30,39 @@ cd ..
 
 ## Konfiguracja
 
+### Narzedzia developerskie i automatyczne sprawdzanie
+
+Po aktywowaniu srodowiska projektu (istniejace `.ankiFac` albo `.venv` z instrukcji
+instalacji):
+
+```bash
+python -m pip install -r requirements-dev.txt
+python -m pre_commit install
+npm --prefix frontend ci
+python -m tools.check
+```
+
+`tools.check` uruchamia Ruff lint/format, Pyright, testy offline z blokada sieci
+oraz TypeScript/build frontendu. Hooki sprawdzaja odpowiednie zmienione pliki przy
+commitach; GitHub Actions wykonuje pelny zestaw. Hooki wymagaja aktywnego srodowiska.
+Formatowanie/fixy sa jawne:
+
+```bash
+python -m ruff check --fix .
+python -m ruff format .
+```
+
+Wspolne ustawienia `.vscode/` dotycza tylko tego repo: Ruff formatuje Python przy
+zapisie, a Pylance korzysta z konfiguracji Pyright w `pyproject.toml`. W VS Code
+wybierz interpreter tego samego srodowiska przez **Python: Select Interpreter**.
+Zadanie **Quality: all checks** uruchamia pelna weryfikacje. Globalne ustawienia
+VS Code nie sa zmieniane. Szczegoly: [Development and verification](docs/development.md).
+
+### Ustawienia aplikacji
+
 Utworz `.env` w katalogu projektu:
 
 ```env
-# Opcjonalnie: katalog eksportu dla starszych narzedzi terminalowych.
-# Aplikacja przegladarkowa wysyla audio do aktywnego profilu przez AnkiConnect.
-ANKI_MEDIA_FOLDER_PATH="/path/to/Anki2/User 1/collection.media"
-
 # Domyslnie: http://127.0.0.1:8765
 ANKI_URL=http://127.0.0.1:8765
 
@@ -264,19 +290,27 @@ Ustawienie `DIKI_OFFLINE=1` w `.env` wylacza takze pobieranie przez proces tla.
 ### Weryfikacja bez sieci
 
 ```bash
-python -m unittest tests.test_word_completion tests.test_diki_fetching tests.test_diki_resources tests.test_dikiApi tests.test_diki_meanings tests.test_diki_regression tests.test_audio_sync tests.test_review_stateless tests.test_target_selection tests.test_sync_rate_limit tests.test_session_storage tests.test_queue_diff
+python -m tools.test_offline
 ```
 
-Testy korzystaja z zapisanych stron i atrap HTTP/Anki. Dwa starsze testy live
-Diki sa domyslnie pomijane (`RUN_LIVE_DIKI_TESTS=1` wlacza je jawnie).
+Testy korzystaja z zapisanych stron, atrap HTTP/Anki i plikow tymczasowych.
+Runner blokuje polaczenia i DNS oraz wylacza testy live niezaleznie od odziedziczonych
+zmiennych srodowiskowych. Nie wlacza aplikacyjnego `DIKI_OFFLINE=1`, bo testy
+pobierania musza przechodzic przez sciezke atrap HTTP. Bezposrednie uruchomienie
+`unittest` omija blokade runnera; jest przeznaczone m.in. do jawnych testow
+integracyjnych (`RUN_LIVE_DIKI_TESTS=1` dla dwoch testow Diki).
 
 ## Dane lokalne
 
 - `data/anki_flashcards_factory.sqlite3` - indeks notatek i sesje.
 - `data/diki_cache/` - HTML, MP3 i osobna baza metadanych, odstepow i postepu pobierania.
 - `words_to_add/words_to_add.txt` - opcjonalna lista slow do zaimportowania w kolejnosci linii.
-- `raw_notes/`, `prepared_notes/` - przestarzaly preprocessing calych list;
-  glowny workflow sprawdza slowa pojedynczo. Wycofanie zapisano jako `L-001` w `to-do`.
+
+Preprocessing `raw_notes/` / `prepared_notes/`, raw editor i opcja `--app -e`
+zostaly usuniete. Usunieto tez reczna obsluge indeksu przez `main.py --db`
+oraz eksport MP3 bezposrednio do folderu mediow. Audio trafia do aktywnego profilu
+Anki przez AnkiConnect; `ANKI_MEDIA_FOLDER_PATH` i `ANKI_BASE_DECK_PATH` nie sa
+juz uzywane. Szczegoly: [zakonczone wycofanie starszych sciezek](docs/roadmap.md#completed-legacy-code-cleanup-2026-11-19).
 
 Starszy indeks JSON ustawiony przez `DATABASE_PATH` jest jednokrotnie
 importowany do SQLite przy pierwszym uruchomieniu.

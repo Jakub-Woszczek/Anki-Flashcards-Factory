@@ -1,10 +1,67 @@
 # Development and verification
 
-Last updated: 2026-11-17.
+Last updated: 2026-11-19.
 
 Status: default test boundary confirmed by the owner in interview batch 21.
-The intended boundary is not yet enforced across all existing test discovery;
-separation work is recorded as `T-002` for another implementation session.
+Legacy live tests were retired on 2026-11-19 and current discovery passes offline.
+The standard check/test commands, hooks, and CI now enforce network isolation (`T-002`).
+
+## Project-local quality tooling
+
+Activate the project's environment, then install `requirements-dev.txt` and run
+`python -m pre_commit install` once per checkout. Tool versions are pinned there;
+`pyproject.toml` owns lint/format and Pyright rules, so diagnostics are reproducible
+outside VS Code. The documented Python 3.11 minimum remains the static-analysis
+target. CI requests an available Python `3.12` build for its macOS runner rather
+than the exact local `.python-version` patch, which may not have a hosted arm64
+build. The existing local environment does not need to be moved or recreated
+merely for this cleanup.
+
+```bash
+python -m tools.check          # lint, format check, types, offline tests, frontend build
+python -m tools.test_offline   # guarded test-only run
+python -m ruff check --fix .   # reviewed safe fixes; no --unsafe-fixes
+python -m ruff format .
+```
+
+The single check command runs from any working directory when the project is on
+Python's import path and uses the invoking interpreter for all Python tools.
+Node dependencies must already be installed with `npm --prefix frontend ci`.
+The frontend build includes TypeScript checking; a separate ESLint/Prettier stack
+is not introduced for this local workbench.
+
+The 2026-11-19 full check passed: Ruff lint, formatting of 42 Python files,
+Pyright with zero errors/warnings, 109 tests run (2 live checks skipped), and the
+frontend production build. All configured local hooks were also exercised and passed.
+
+Local hooks check changed Python files with Ruff, then run project-wide Pyright
+and guarded tests for Python changes. Frontend changes trigger its type-check/build.
+Activate the development environment before committing. GitHub Actions runs the
+full check on macOS for pushes and pull requests with read-only repository access.
+Dependency installation requires the network; the regression tests do not.
+
+### VS Code scope
+
+The shared `.vscode/settings.json` applies to this workspace, overriding the user's
+global Python `formatOnSave: false`. It enables Ruff formatting and safe fix/import
+actions on explicit saves. It does not change settings in other repositories.
+Select this project's interpreter in **Python: Select Interpreter**; the default
+hint is `.venv`, while an already selected `.ankiFac` remains usable. Pylance reads
+the project's `standard` Pyright configuration, including the unused-code checks.
+The **Quality: all checks** task
+uses that selected interpreter. Test Explorer uses direct unittest discovery;
+use the quality task or guarded CLI for enforced network isolation.
+
+### Behavior-preserving diagnostic fixes
+
+Formatting/imports and inaccurate type annotations were cleaned up without changing
+stored fields or workflows. Dynamic test doubles use explicit `Any` only at their
+fixture boundaries. Production JSON settings are heterogeneous and typed accordingly.
+Narrow suppressions preserve the parser's specified `ValueError`, the legacy index
+error conversion, the lock-timeout exception context, and optional Gemini's broad
+SDK-error-to-advisory-text behavior. A possible textless Gemini response still has
+its prior rendering behavior: no fallback was specified, so the rendering argument
+has a documented local type-check exception rather than an invented behavior change.
 
 ## Routine automated tests — accepted boundary
 
@@ -35,18 +92,34 @@ or rewriting expectations/content.
 
 ## Current test organization and gaps
 
-- The README documents a selected fixture/mock-backed module suite.
-- `tests/test_dikiApi.py` already puts two live Diki checks behind
+- The README documents the guarded full-discovery runner.
+- `tests/test_diki_api.py` puts two live Diki checks behind
   `RUN_LIVE_DIKI_TESTS=1`.
-- Three original live smoke tests are approved for deletion as `T-001`; they are
-  still present pending separate cleanup.
-- Other methods in `tests/test_ankiConnect.py` read the configured real Anki
-  application without an explicit integration-test gate. Read-only is still live
-  and therefore outside the accepted default boundary.
-- Unrestricted discovery does not currently enforce the intended separation.
-  `T-002` records that gap without choosing a test framework or gating mechanism.
+- The three original live smoke tests were removed as `T-001` on 2026-11-19.
+- The two read-only legacy Anki tests were also removed with the retired manual
+  index-scanning workflow. Both legacy test modules are gone.
+- Direct-to-folder audio-export tests were removed with the obsolete export code.
+- `tools/test_offline.py` blocks socket connections and DNS for the entire discovery
+  and test run. It forces live checks off and resets the application offline flag
+  only within the test process, so fake download tests still execute normally.
+- Guard regressions verify blocked Anki/Diki transports, restoration of environment
+  overrides, and a failing run when a test accidentally attempts network access.
 
-No test code or integration gates were changed during this documentation batch.
+Routine full discovery:
+
+```bash
+python -m tools.test_offline
+```
+
+Direct `python -m unittest ...` bypasses the runner's guard. Use it deliberately for
+focused checks or explicitly requested live tests. `RUN_LIVE_DIKI_TESTS=1` enables
+the two live Diki tests only with direct unittest invocation, never through the
+guarded runner. Offline verification means fake transport, not bypassing it.
+
+On 2026-11-19, discovery ran 107 tests successfully with 2 opt-in live checks
+skipped. A temporary process-level patch blocked `socket.socket.connect` to verify
+that no real connections were attempted. The initial run with `DIKI_OFFLINE=1`
+failed because it blocked mocked downloads; the successful run unset it.
 
 ## Verified isolated selection
 

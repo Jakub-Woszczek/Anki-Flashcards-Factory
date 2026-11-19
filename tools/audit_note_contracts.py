@@ -1,15 +1,15 @@
 """Read-only Anki audit: python -m tools.audit_note_contracts --sample-size 10."""
 
 import argparse
-from collections import Counter
 import json
 import sys
+from collections import Counter
 
 from dotenv import load_dotenv
 
 from backend.note_contracts import CONTRACT_VERSION, NOTE_TYPES, parse_en_word
 from backend.settings import ROOT_DIR
-from external_APIs.ankiConnect import AnkiConnect
+from external_apis.anki_connect import AnkiConnect
 
 
 def audit_en_words(api, sample_size=10):
@@ -34,7 +34,7 @@ def audit_en_words(api, sample_size=10):
         note_ids = read("findNotes", query="note:" + json.dumps(model))
         counts = {"checked": 0, "passed": 0, "failed": 0}
         for start in range(0, len(note_ids), 250):
-            batch = note_ids[start:start + 250]
+            batch = note_ids[start : start + 250]
             notes = read("notesInfo", notes=batch)
             if len(notes) != len(batch) or {note.get("noteId") for note in notes} != set(batch):
                 raise RuntimeError("Incomplete notesInfo response; rerun the audit")
@@ -50,10 +50,14 @@ def audit_en_words(api, sample_size=10):
                     reason = str(error)
                     report["failure_reasons"][reason] += 1
                     if len(report["failure_samples"]) < sample_size:
-                        report["failure_samples"].append({
-                            "note_id": note["noteId"], "note_type": model,
-                            "value": value, "reason": reason,
-                        })
+                        report["failure_samples"].append(
+                            {
+                                "note_id": note["noteId"],
+                                "note_type": model,
+                                "value": value,
+                                "reason": reason,
+                            }
+                        )
                 else:
                     counts["passed"] += 1
         report["by_note_type"][model] = counts
@@ -64,7 +68,9 @@ def audit_en_words(api, sample_size=10):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Audit en_word contracts without modifying Anki")
-    parser.add_argument("--sample-size", type=int, default=10, help="Maximum failing notes to display")
+    parser.add_argument(
+        "--sample-size", type=int, default=10, help="Maximum failing notes to display"
+    )
     args = parser.parse_args(argv)
     if args.sample_size < 0:
         parser.error("sample-size must be nonnegative")

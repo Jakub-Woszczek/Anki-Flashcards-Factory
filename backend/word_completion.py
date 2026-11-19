@@ -9,6 +9,7 @@ import uuid
 from contextlib import closing, contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from backend.settings import configured_words_to_add_path, database_path
 from backend.word_list import atomic_write, list_lock, normalize_word
@@ -72,20 +73,35 @@ class WordCompletion:
         return profile
 
     def prepare(self, profile, word, intent, reason, *, expected=None, note_id=None):
-        digest = hashlib.sha256(json.dumps(intent, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+        digest = hashlib.sha256(
+            json.dumps(intent, sort_keys=True, ensure_ascii=False).encode()
+        ).hexdigest()
         with self.connect() as db:
-            row = db.execute("""SELECT * FROM word_saves
+            row = db.execute(
+                """SELECT * FROM word_saves
                 WHERE profile=? AND word=? AND intent=? AND reason=?
                 AND (state != 'cleaned' OR reason IN ('create', 'custom'))
                 ORDER BY created_at DESC LIMIT 1""",
-                (profile, normalize_word(word), digest, reason)).fetchone()
+                (profile, normalize_word(word), digest, reason),
+            ).fetchone()
             if row:
                 return dict(row), True
             save_id = str(uuid.uuid4())
-            db.execute("""INSERT INTO word_saves
+            db.execute(
+                """INSERT INTO word_saves
                 (id,profile,word,intent,reason,note_id,expected_json,created_at)
-                VALUES (?,?,?,?,?,?,?,?)""", (save_id, profile, normalize_word(word), digest,
-                reason, note_id, json.dumps(expected or {}, ensure_ascii=False), utc_now()))
+                VALUES (?,?,?,?,?,?,?,?)""",
+                (
+                    save_id,
+                    profile,
+                    normalize_word(word),
+                    digest,
+                    reason,
+                    note_id,
+                    json.dumps(expected or {}, ensure_ascii=False),
+                    utc_now(),
+                ),
+            )
         return self.get(save_id), False
 
     def get(self, save_id):
@@ -96,13 +112,17 @@ class WordCompletion:
         if type(note_id) is not int or note_id <= 0:
             raise VerificationError("Anki did not return a valid note ID; word retained")
         with self.connect() as db:
-            db.execute("UPDATE word_saves SET note_id=?,expected_json=? WHERE id=?",
-                       (note_id, json.dumps(expected, ensure_ascii=False), save_id))
+            db.execute(
+                "UPDATE word_saves SET note_id=?,expected_json=? WHERE id=?",
+                (note_id, json.dumps(expected, ensure_ascii=False), save_id),
+            )
 
     def expect(self, save_id, expected):
         with self.connect() as db:
-            db.execute("UPDATE word_saves SET expected_json=? WHERE id=?",
-                       (json.dumps(expected, ensure_ascii=False), save_id))
+            db.execute(
+                "UPDATE word_saves SET expected_json=? WHERE id=?",
+                (json.dumps(expected, ensure_ascii=False), save_id),
+            )
 
     def recover(self, anki, save):
         """An addNote timeout may have created a note. Never blindly submit it twice."""
@@ -111,7 +131,9 @@ class WordCompletion:
         expected = json.loads(save["expected_json"])
         ids = anki.invoke("findNotes", query="")
         if anki.last_error or ids is None:
-            raise VerificationError(anki.last_error or "Could not resolve the interrupted Anki save")
+            raise VerificationError(
+                anki.last_error or "Could not resolve the interrupted Anki save"
+            )
         notes = anki.notes_info(ids)
         if anki.last_error:
             raise VerificationError(anki.last_error)
@@ -144,8 +166,13 @@ class WordCompletion:
             if not isinstance(card, dict):
                 raise VerificationError("Could not identify existing card decks; word retained")
             card_id, deck = card.get("cardId"), card.get("deckName")
-            if (type(card_id) is not int or card_id <= 0 or not isinstance(deck, str)
-                    or not deck or str(card_id) in decks):
+            if (
+                type(card_id) is not int
+                or card_id <= 0
+                or not isinstance(deck, str)
+                or not deck
+                or str(card_id) in decks
+            ):
                 raise VerificationError("Could not identify existing card decks; word retained")
             decks[str(card_id)] = deck
         return decks
@@ -161,7 +188,9 @@ class WordCompletion:
         for name, value in expected.get("fields", {}).items():
             actual = note.get("fields", {}).get(name, {}).get("value")
             # Only normalize line-ending transport differences, never field contents.
-            if not isinstance(actual, str) or actual.replace("\r\n", "\n") != value.replace("\r\n", "\n"):
+            if not isinstance(actual, str) or actual.replace("\r\n", "\n") != value.replace(
+                "\r\n", "\n"
+            ):
                 differences.append(f"field {name}")
         tags = set(note.get("tags", []))
         if not set(expected.get("tags", [])) <= tags:
@@ -178,7 +207,9 @@ class WordCompletion:
             elif any(card.get("deckName") != expected["deckName"] for card in cards):
                 differences.append("deck")
         if differences:
-            raise VerificationError(f"Note {note_id} verification failed: {', '.join(differences)}. Word retained.")
+            raise VerificationError(
+                f"Note {note_id} verification failed: {', '.join(differences)}. Word retained."
+            )
         return note
 
     def verify(self, anki, save_id):
@@ -192,12 +223,17 @@ class WordCompletion:
             raise VerificationError("Anki profile changed during read-back; word retained")
         # Persist confirmation and the local index together, before touching the list.
         with self.connect() as db:
-            db.execute("""UPDATE word_saves SET observed_json=?,verified_at=?,
+            db.execute(
+                """UPDATE word_saves SET observed_json=?,verified_at=?,
                 state='verified' WHERE id=?""",
-                (json.dumps(note, ensure_ascii=False), utc_now(), save_id))
-            db.execute("""INSERT INTO note_index VALUES (?,?,?)
+                (json.dumps(note, ensure_ascii=False), utc_now(), save_id),
+            )
+            db.execute(
+                """INSERT INTO note_index VALUES (?,?,?)
                 ON CONFLICT(normalized_word) DO UPDATE SET note_id=excluded.note_id,
-                en_word=excluded.en_word""", (save["word"], save["word"], save["note_id"]))
+                en_word=excluded.en_word""",
+                (save["word"], save["word"], save["note_id"]),
+            )
         return note
 
     def cleanup(self, save_ids):
@@ -226,23 +262,34 @@ class WordCompletion:
                 backup = directory / f"words-to-add-{uuid.uuid4()}.txt.bak"
                 atomic_write(backup, content)
                 with self.connect() as db:
-                    db.executemany("INSERT OR IGNORE INTO word_list_archive VALUES (?,?,?,?)", removed)
-                    db.executemany("UPDATE word_saves SET backup_path=? WHERE id=?",
-                                   [(str(backup), save["id"]) for save in saves.values()])
+                    db.executemany(
+                        "INSERT OR IGNORE INTO word_list_archive VALUES (?,?,?,?)", removed
+                    )
+                    db.executemany(
+                        "UPDATE word_saves SET backup_path=? WHERE id=?",
+                        [(str(backup), save["id"]) for save in saves.values()],
+                    )
                 replacement = b"".join(remaining)
-                if content.startswith(b"\xef\xbb\xbf") and not replacement.startswith(b"\xef\xbb\xbf"):
+                if content.startswith(b"\xef\xbb\xbf") and not replacement.startswith(
+                    b"\xef\xbb\xbf"
+                ):
                     replacement = b"\xef\xbb\xbf" + replacement
                 atomic_write(self.words_path, replacement)
             with self.connect() as db:
-                db.executemany("UPDATE word_saves SET state='cleaned',cleaned_at=? WHERE id=?",
-                               [(utc_now(), save["id"]) for save in saves.values()])
+                db.executemany(
+                    "UPDATE word_saves SET state='cleaned',cleaned_at=? WHERE id=?",
+                    [(utc_now(), save["id"]) for save in saves.values()],
+                )
         return {"removedLines": len(removed), "backupPath": str(backup) if backup else None}
 
     def finish(self, anki, save_id):
         self.verify(anki, save_id)
-        result = {"verified": True, "cleanupPending": False}
+        result: dict[str, Any] = {"verified": True, "cleanupPending": False}
         try:
             result.update(self.cleanup([save_id]))
         except (OSError, sqlite3.Error, UnicodeError) as error:
-            result.update(cleanupPending=True, cleanupWarning=f"Note verified; list cleanup is pending: {error}")
+            result.update(
+                cleanupPending=True,
+                cleanupWarning=f"Note verified; list cleanup is pending: {error}",
+            )
         return result

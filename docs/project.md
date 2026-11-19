@@ -1,6 +1,6 @@
 # Project purpose and scope
 
-Last updated: 2026-11-17.
+Last updated: 2026-11-19.
 
 Status: foundation confirmed by the owner during the handbook walkthrough.
 Detailed feature and integration rules remain under discussion. See the
@@ -136,7 +136,8 @@ are resolved.
 CLI capture resolves the Diki English entry before appending, so those captured
 words are Diki-compatible input. Older manual/book input can still need the main
 app's per-word spelling/entry resolution. The former separate whole-list
-raw/prepared preprocessing path is deprecated; see [future retirement](roadmap.md#deprecated-workflow-whole-list-word-preprocessing-l-001).
+raw/prepared preprocessing path was retired on 2026-11-19; see
+[the retirement record](roadmap.md#deprecated-workflow-whole-list-word-preprocessing-l-001).
 
 The file itself is the authoritative queue. The current duplicated SQLite
 add-queue snapshot is an implementation mismatch to remove in a separate refactor,

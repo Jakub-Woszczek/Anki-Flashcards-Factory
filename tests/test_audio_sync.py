@@ -1,5 +1,6 @@
 import tempfile
 from pathlib import Path
+from typing import Any
 from unittest import TestCase
 
 from backend.services import FactoryService
@@ -10,7 +11,6 @@ class FakeDiki:
 
     def __init__(self, audio_path: Path):
         self.audio_path = audio_path
-        self.last_audio_path = None
 
     def fetch_audio(self, _word):
         return self.audio_path.read_bytes()
@@ -29,7 +29,7 @@ class TestAudioSync(TestCase):
         with tempfile.TemporaryDirectory() as directory:
             audio_path = Path(directory) / "self-loathing.mp3"
             audio_path.write_bytes(b"audio")
-            service = FactoryService.__new__(FactoryService)
+            service: Any = FactoryService.__new__(FactoryService)
             service.diki = FakeDiki(audio_path)
             service.anki = FakeAnki()
 

@@ -1,6 +1,6 @@
 # Feature map and specification coverage
 
-Last updated: 2026-11-17.
+Last updated: 2026-11-19.
 
 This is a living capability inventory. "Present" means observed in code or live
 Anki where noted, not that every path meets its intended contract or was freshly
@@ -21,7 +21,7 @@ tested. Specification status and implementation status are separate.
 | Field-contract audit | Incrementally establish predictable stored content for future refinement | Present; only `en_word` syntax currently defined/audited. [Field contracts](../note-data-contracts.md) |
 | Image candidate marking | Mark words that might later suit image cards | Present as `IMAGE`; partial evaluation coverage. Full authoring/migration is deferred |
 | Per-word draft recovery | Convenience when leaving before completing one word | Present but rarely useful; redoing selections is acceptable. Optional simplification `Q-002` |
-| Older raw/prepared-file preprocessing | Formerly prepare whole Diki-compatible English lists before note creation | Deprecated: per-word browser resolution supersedes it and CLI capture resolves before append. Code/files remain; retirement review is `L-001` |
+| Older raw/prepared-file preprocessing | Formerly prepare whole Diki-compatible English lists before note creation | Retired 2026-11-19 (`L-001`): code, CLI option, tests, and vocabulary directories removed. Per-word browser/CLI resolution remains |
 
 ## Deferred features and open decisions
 
@@ -38,5 +38,8 @@ SQLite migration, examples, offline prefetch, fetching isolation, incremental
 contracts, verified source cleanup, and the deck-preservation correction.
 
 Historical data operations are identified separately from software features.
+The [2026-11-19 cleanup](roadmap.md#completed-legacy-code-cleanup-2026-11-19)
+also retired manual index-maintenance commands, standalone inspection helpers,
+direct-folder audio export, unused Anki wrappers, and their obsolete tests.
 Existing code and past plans remain evidence rather than automatic approval of
 desired behavior. For remaining coverage/questions, use [review.md](review.md).

@@ -8,14 +8,13 @@ from collections import Counter
 from difflib import SequenceMatcher
 from typing import Any
 
-from allNotesDb import NotesDatabase
+from backend.note_index import NotesDatabase
 from backend.storage import SessionStore
 from backend.word_completion import VerificationError, WordCompletion
-from external_APIs.ankiConnect import AnkiConnect
-from external_APIs.dikiApi import DikiApi
-from external_APIs.diki_resources import ResourceError
-from external_APIs.geminiAPI import GeminiBot
-
+from external_apis.anki_connect import AnkiConnect
+from external_apis.diki_api import DikiApi
+from external_apis.diki_resources import ResourceError
+from external_apis.gemini_api import GeminiBot
 
 SYNC_COOLDOWN_SECONDS = 10
 
@@ -68,7 +67,10 @@ class FactoryService:
         self._ensure_sync_state()
         with self._sync_lock:
             self._sync_dirty = True
-            if self._last_sync_at is not None and self._sync_now() - self._last_sync_at < SYNC_COOLDOWN_SECONDS:
+            if (
+                self._last_sync_at is not None
+                and self._sync_now() - self._last_sync_at < SYNC_COOLDOWN_SECONDS
+            ):
                 result: dict[str, Any] = {"synced": False, "syncPending": True}
                 if self._sync_error:
                     result["syncWarning"] = self._sync_error
@@ -367,7 +369,9 @@ class FactoryService:
         return {
             "deckName": override.get("deckName") or session["deckName"],
             "modelName": override.get("modelName") or session["modelName"],
-            "fieldMapping": override_mapping if isinstance(override_mapping, dict) else session["fieldMapping"],
+            "fieldMapping": override_mapping
+            if isinstance(override_mapping, dict)
+            else session["fieldMapping"],
             "isOverride": bool(override.get("deckName") or override.get("modelName")),
         }
 
@@ -377,7 +381,7 @@ class FactoryService:
         draft: dict[str, Any],
         *,
         include_audio: bool = True,
-    ) -> tuple[dict[str, str], str, list[str]]:
+    ) -> tuple[dict[str, str], str, list[list[str]]]:
         mapping = self._card_target(session, draft)["fieldMapping"]
         english_field = mapping.get("englishField")
         translation_field = mapping.get("translationField")
@@ -391,7 +395,9 @@ class FactoryService:
         fields = {english_field: word, translation_field: translation_html}
         additional_fields = mapping.get("additionalFields", {})
         if isinstance(additional_fields, dict):
-            fields.update({key: str(value) for key, value in additional_fields.items() if value is not None})
+            fields.update(
+                {key: str(value) for key, value in additional_fields.items() if value is not None}
+            )
         if audio_field:
             fields[audio_field] = f"[sound:{self._audio_filename(word)}]" if include_audio else ""
         return fields, translation_html, selected_groups
@@ -404,7 +410,9 @@ class FactoryService:
             raise ServiceError(self.anki.last_error or "Anki note type could not be read", 503)
         unknown_fields = set(fields) - set(schema["fields"])
         if unknown_fields:
-            raise ServiceError(f"Configured fields are not in model {target['modelName']}: {', '.join(sorted(unknown_fields))}")
+            raise ServiceError(
+                f"Configured fields are not in model {target['modelName']}: {', '.join(sorted(unknown_fields))}"
+            )
 
     def preview_current(self, session_id: str):
         session = self.session(session_id)
@@ -428,7 +436,9 @@ class FactoryService:
     def _note_details(self, note_id: int):
         note = self.anki.get_note(note_id)
         if not note:
-            raise ServiceError(self.anki.last_error or "The indexed Anki note no longer exists", 404)
+            raise ServiceError(
+                self.anki.last_error or "The indexed Anki note no longer exists", 404
+            )
         cards = self.anki.get_note_cards(note_id)
         return {"note": note, "cards": cards}
 
@@ -461,7 +471,12 @@ class FactoryService:
                 proposed, _, _ = self._field_payload(session, session["draft"])
                 response["proposedFields"] = proposed
                 response["fieldDiff"] = [
-                    {"field": name, "existing": fields.get(name, ""), "proposed": value, "changed": fields.get(name, "") != value}
+                    {
+                        "field": name,
+                        "existing": fields.get(name, ""),
+                        "proposed": value,
+                        "changed": fields.get(name, "") != value,
+                    }
                     for name, value in proposed.items()
                 ]
             except ServiceError:
@@ -474,7 +489,9 @@ class FactoryService:
             content = self.diki.fetch_audio(word)
             result = self.anki.store_media_file(self._audio_filename(word), content)
             if result is None:
-                self.diki.last_error = self.anki.last_error or "Anki could not store the downloaded audio"
+                self.diki.last_error = (
+                    self.anki.last_error or "Anki could not store the downloaded audio"
+                )
                 return False
             return True
         except (ResourceError, AssertionError, OSError) as error:
@@ -494,10 +511,20 @@ class FactoryService:
         card_id: int | None,
     ) -> dict[str, Any]:
         english_field = target["fieldMapping"].get("englishField")
-        if english_field and self._normalize_anki_field_value(fields.get(english_field, "")) != word:
-            raise ServiceError("The submitted English field does not match the word; word retained", 409)
-        intent = {"target": target, "fields": fields, "tags": sorted(tags),
-                  "removeTags": sorted(remove_tags), "action": action}
+        if (
+            english_field
+            and self._normalize_anki_field_value(fields.get(english_field, "")) != word
+        ):
+            raise ServiceError(
+                "The submitted English field does not match the word; word retained", 409
+            )
+        intent = {
+            "target": target,
+            "fields": fields,
+            "tags": sorted(tags),
+            "removeTags": sorted(remove_tags),
+            "action": action,
+        }
         try:
             with self.completions.lock():
                 profile = self.completions.profile(self.anki)
@@ -506,23 +533,45 @@ class FactoryService:
                     self.completions.recover(self.anki, save)
                     saved = self.completions.get(save["id"])
                     expected = json.loads(saved["expected_json"])
-                    result = {"action": "created" if action == "create" else "updated",
-                              "noteId": saved["note_id"],
-                              "audioDownloaded": bool(expected.get("fields", {}).get(
-                                  target["fieldMapping"].get("audioField"))), "resumed": True}
+                    result = {
+                        "action": "created" if action == "create" else "updated",
+                        "noteId": saved["note_id"],
+                        "audioDownloaded": bool(
+                            expected.get("fields", {}).get(target["fieldMapping"].get("audioField"))
+                        ),
+                        "resumed": True,
+                    }
                     result.update(self.completions.finish(self.anki, save["id"]))
                     self.notes.load_db()
                     result.update(self._sync_after_mutation())
                     return result
                 return self._commit_and_verify(
-                    save["id"], target, fields, tags, remove_tags, action,
-                    existing_note_id, word, flag, card_id)
+                    save["id"],
+                    target,
+                    fields,
+                    tags,
+                    remove_tags,
+                    action,
+                    existing_note_id,
+                    word,
+                    flag,
+                    card_id,
+                )
         except (VerificationError, OSError, sqlite3.Error) as error:
             raise ServiceError(f"Save not confirmed; word retained. {error}", 503) from error
 
     def _commit_and_verify(
-        self, save_id, target, fields, tags, remove_tags, action,
-        existing_note_id, word, flag, card_id,
+        self,
+        save_id,
+        target,
+        fields,
+        tags,
+        remove_tags,
+        action,
+        existing_note_id,
+        word,
+        flag,
+        card_id,
     ):
         audio_downloaded = self._write_audio(word)
         audio_field = target["fieldMapping"].get("audioField")
@@ -537,9 +586,15 @@ class FactoryService:
 
         if action == "create":
             if existing_note_id:
-                raise ServiceError("This word already has an indexed note. Review and update it instead.", 409)
-            expected = {"deckName": target["deckName"], "modelName": target["modelName"],
-                        "fields": fields, "tags": tags}
+                raise ServiceError(
+                    "This word already has an indexed note. Review and update it instead.", 409
+                )
+            expected = {
+                "deckName": target["deckName"],
+                "modelName": target["modelName"],
+                "fields": fields,
+                "tags": tags,
+            }
             self.completions.expect(save_id, expected)
             note_id = self.anki.add_note(target["deckName"], target["modelName"], fields, tags)
             if type(note_id) is not int or note_id <= 0:
@@ -556,7 +611,9 @@ class FactoryService:
             # Refresh content in place; the queue target only controls new notes.
             card_decks = self.completions.card_decks(details["cards"])
             if existing.get("modelName") != target["modelName"]:
-                raise ServiceError("Select the existing note type before updating this learned card", 409)
+                raise ServiceError(
+                    "Select the existing note type before updating this learned card", 409
+                )
             if not audio_downloaded and audio_field:
                 previous_audio = existing.get("fields", {}).get(audio_field, {}).get("value", "")
                 if previous_audio:
@@ -565,13 +622,24 @@ class FactoryService:
                     remove_tags = [tag for tag in remove_tags if tag != "noAudio"]
             english_field = target["fieldMapping"].get("englishField")
             update_fields = {name: value for name, value in fields.items() if name != english_field}
-            expected_fields = {name: value["value"] for name, value in existing.get("fields", {}).items()}
+            expected_fields = {
+                name: value["value"] for name, value in existing.get("fields", {}).items()
+            }
             expected_fields.update(update_fields)
-            if english_field and self._normalize_anki_field_value(expected_fields.get(english_field, "")) != word:
-                raise ServiceError("The existing note contains a different English word; word retained", 409)
-            expected = {"cardDecks": card_decks, "modelName": target["modelName"],
-                        "fields": expected_fields, "tags": tags,
-                        "removeTags": sorted(set(remove_tags) - set(tags))}
+            if (
+                english_field
+                and self._normalize_anki_field_value(expected_fields.get(english_field, "")) != word
+            ):
+                raise ServiceError(
+                    "The existing note contains a different English word; word retained", 409
+                )
+            expected = {
+                "cardDecks": card_decks,
+                "modelName": target["modelName"],
+                "fields": expected_fields,
+                "tags": tags,
+                "removeTags": sorted(set(remove_tags) - set(tags)),
+            }
             self.completions.submitted(save_id, existing_note_id, expected)
             self.anki.update_note_fields(existing_note_id, update_fields)
             if self.anki.last_error:
@@ -585,12 +653,16 @@ class FactoryService:
                 self.anki.remove_tag_from_note(existing_note_id, tag)
                 if self.anki.last_error:
                     raise ServiceError(self.anki.last_error, 503)
-            result = {"action": "updated", "noteId": existing_note_id, "audioDownloaded": audio_downloaded}
+            result = {
+                "action": "updated",
+                "noteId": existing_note_id,
+                "audioDownloaded": audio_downloaded,
+            }
 
         result.update(self.completions.finish(self.anki, save_id))
         self.notes.load_db()
         if flag is not None and action == "create" and not card_id:
-            self.anki.set_note_cards_flag(note_id, flag)
+            self.anki.set_note_cards_flag(result["noteId"], flag)
             if self.anki.last_error:
                 result["flagWarning"] = self.anki.last_error
         elif flag is not None and card_id:
@@ -603,7 +675,9 @@ class FactoryService:
         result.update(self._sync_after_mutation())
         return result
 
-    def commit_current(self, session_id: str, action: str, remove_tags: list[str], flag: int | None):
+    def commit_current(
+        self, session_id: str, action: str, remove_tags: list[str], flag: int | None
+    ):
         session = self.session(session_id)
         current = session["current"]
         if not current:
@@ -616,14 +690,29 @@ class FactoryService:
         fields, _, _ = self._field_payload(session, draft)
         self._validate_schema(target, fields)
         word = self._draft_word(draft, current)
-        tags = [tag.strip() for tag in draft.get("tags", []) if isinstance(tag, str) and tag.strip()]
-        existing_note_id = current.get("noteId") or draft.get("existingNoteId") or self.notes.get_note_id(word)
+        tags = [
+            tag.strip() for tag in draft.get("tags", []) if isinstance(tag, str) and tag.strip()
+        ]
+        existing_note_id = (
+            current.get("noteId") or draft.get("existingNoteId") or self.notes.get_note_id(word)
+        )
 
         result = self._perform_commit(
-            target, fields, tags, remove_tags, action, existing_note_id, word, flag, current.get("cardId")
+            target,
+            fields,
+            tags,
+            remove_tags,
+            action,
+            existing_note_id,
+            word,
+            flag,
+            current.get("cardId"),
         )
-        result["session"] = (self.session(session_id) if result.get("cleanupPending")
-                             else self.sessions.complete_current(session_id))
+        result["session"] = (
+            self.session(session_id)
+            if result.get("cleanupPending")
+            else self.sessions.complete_current(session_id)
+        )
         return result
 
     def skip_current(self, session_id: str):
@@ -648,7 +737,9 @@ class FactoryService:
             raise ServiceError(self.anki.last_error or "Anki note type could not be read", 503)
         unknown_fields = set(fields) - set(schema["fields"])
         if unknown_fields:
-            raise ServiceError(f"Fields are not in model {model_name}: {', '.join(sorted(unknown_fields))}")
+            raise ServiceError(
+                f"Fields are not in model {model_name}: {', '.join(sorted(unknown_fields))}"
+            )
         note_fields = {field: str(fields.get(field, "")) for field in schema["fields"]}
         queue_word = current.get("word") or (session["draft"] or {}).get("word")
         if not isinstance(queue_word, str) or not queue_word.strip():
@@ -657,22 +748,29 @@ class FactoryService:
         try:
             with self.completions.lock():
                 profile = self.completions.profile(self.anki)
-                save, resumed = self.completions.prepare(profile, queue_word, expected, "custom", expected=expected)
+                save, resumed = self.completions.prepare(
+                    profile, queue_word, expected, "custom", expected=expected
+                )
                 if resumed:
                     self.completions.recover(self.anki, save)
                     note_id = self.completions.get(save["id"])["note_id"]
                 else:
                     note_id = self.anki.add_note(deck_name, model_name, note_fields)
                     if type(note_id) is not int or note_id <= 0:
-                        raise ServiceError(self.anki.last_error or "Anki rejected the custom note", 409)
+                        raise ServiceError(
+                            self.anki.last_error or "Anki rejected the custom note", 409
+                        )
                     self.completions.submitted(save["id"], note_id, expected)
                 result = {"action": "created custom card", "noteId": note_id}
                 result.update(self.completions.finish(self.anki, save["id"]))
                 self.notes.load_db()
         except (VerificationError, OSError, sqlite3.Error) as error:
             raise ServiceError(f"Save not confirmed; word retained. {error}", 503) from error
-        result["session"] = (self.session(session_id) if result.get("cleanupPending")
-                             else self.sessions.complete_current(session_id))
+        result["session"] = (
+            self.session(session_id)
+            if result.get("cleanupPending")
+            else self.sessions.complete_current(session_id)
+        )
         result.update(self._sync_after_mutation())
         return result
 
@@ -716,7 +814,9 @@ class FactoryService:
                 path = f"{path}::{part}" if path else part
                 if path not in children_by_path:
                     node = {"name": part, "fullName": path, "children": []}
-                    children_by_path.setdefault(path.rsplit("::", 1)[0] if "::" in path else "", []).append(node)
+                    children_by_path.setdefault(
+                        path.rsplit("::", 1)[0] if "::" in path else "", []
+                    ).append(node)
                     children_by_path[path] = node["children"]
         return roots
 
@@ -735,9 +835,10 @@ class FactoryService:
     def gemini_translation(self, word: str, diki_translations: list[list[str]]):
         return {"text": self.gemini.get_word_translation(word, diki_translations)}
 
-    def gemini_review(self, word: str, current_translation: str, proposed_translations: list[list[str]]):
-        proposed = "; ".join(", ".join(group) for group in proposed_translations if group
-        )
+    def gemini_review(
+        self, word: str, current_translation: str, proposed_translations: list[list[str]]
+    ):
+        proposed = "; ".join(", ".join(group) for group in proposed_translations if group)
         question = (
             "Dla angielskiego slowa ponizej porownaj polskie tlumaczenia. "
             "Krotko wyjasnij, ktore sa najlepsze i czy cos jest bledne. "
@@ -827,12 +928,22 @@ class FactoryService:
             "cards": details["cards"],
         }
         if draft and field_mapping:
-            pseudo_session = {"deckName": None, "modelName": None, "fieldMapping": field_mapping, "current": {}}
+            pseudo_session = {
+                "deckName": None,
+                "modelName": None,
+                "fieldMapping": field_mapping,
+                "current": {},
+            }
             try:
                 proposed, _, _ = self._field_payload(pseudo_session, draft)
                 response["proposedFields"] = proposed
                 response["fieldDiff"] = [
-                    {"field": name, "existing": fields.get(name, ""), "proposed": value, "changed": fields.get(name, "") != value}
+                    {
+                        "field": name,
+                        "existing": fields.get(name, ""),
+                        "proposed": value,
+                        "changed": fields.get(name, "") != value,
+                    }
                     for name, value in proposed.items()
                 ]
             except ServiceError:
@@ -840,9 +951,18 @@ class FactoryService:
         return response
 
     def review_item_preview(
-        self, draft: dict[str, Any], deck_name: str | None, model_name: str | None, field_mapping: dict[str, Any]
+        self,
+        draft: dict[str, Any],
+        deck_name: str | None,
+        model_name: str | None,
+        field_mapping: dict[str, Any],
     ):
-        pseudo_session = {"deckName": deck_name, "modelName": model_name, "fieldMapping": field_mapping, "current": {}}
+        pseudo_session = {
+            "deckName": deck_name,
+            "modelName": model_name,
+            "fieldMapping": field_mapping,
+            "current": {},
+        }
         fields, translation_html, selected_groups = self._field_payload(pseudo_session, draft)
         target = self._card_target(pseudo_session, draft)
         word = self._draft_word(draft, pseudo_session["current"])
@@ -868,11 +988,20 @@ class FactoryService:
         model_name: str | None,
         field_mapping: dict[str, Any],
     ):
-        pseudo_session = {"deckName": deck_name, "modelName": model_name, "fieldMapping": field_mapping, "current": {}}
+        pseudo_session = {
+            "deckName": deck_name,
+            "modelName": model_name,
+            "fieldMapping": field_mapping,
+            "current": {},
+        }
         target = self._card_target(pseudo_session, draft)
         fields, _, _ = self._field_payload(pseudo_session, draft)
         self._validate_schema(target, fields)
         word = self._draft_word(draft, pseudo_session["current"])
-        tags = [tag.strip() for tag in draft.get("tags", []) if isinstance(tag, str) and tag.strip()]
+        tags = [
+            tag.strip() for tag in draft.get("tags", []) if isinstance(tag, str) and tag.strip()
+        ]
         existing_note_id = note_id or draft.get("existingNoteId") or self.notes.get_note_id(word)
-        return self._perform_commit(target, fields, tags, remove_tags, action, existing_note_id, word, flag, card_id)
+        return self._perform_commit(
+            target, fields, tags, remove_tags, action, existing_note_id, word, flag, card_id
+        )

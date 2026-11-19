@@ -1,6 +1,6 @@
 # Diki cache and background preparation
 
-Last updated: 2026-11-17.
+Last updated: 2026-11-19.
 
 Specification status: two purposes, bounded queue-buffer priority, and rolling
 snapshot retention confirmed. Exact buffer configuration/book selection and the
@@ -55,14 +55,14 @@ See [Diki compatibility](../contracts/diki.md) and the
 
 | Area | Inspected behavior | Evidence |
 | --- | --- | --- |
-| Shared storage | App and CLI use raw HTML/MP3 resources with SQLite metadata; successful resources are shared across request profiles | `external_APIs/diki_resources.py` |
-| Local reuse | Cache hits are integrity-checked; raw HTML is reparsed locally | `DikiResources._read_cached`, `external_APIs/dikiApi.py` |
+| Shared storage | App and CLI use raw HTML/MP3 resources with SQLite metadata; successful resources are shared across request profiles | `external_apis/diki_resources.py` |
+| Local reuse | Cache hits are integrity-checked; raw HTML is reparsed locally | `DikiResources._read_cached`, `external_apis/diki_api.py` |
 | Provenance | Metadata includes source URL, download time, content digest, and size | `DikiResources._save_locked` |
 | Fetch profiles | Interactive and background fetching have separate request state while sharing successful resources | `DikiResources` |
-| Current prefetch input | Discovers `.txt` lists, including books, from the configured words directory; does not query Anki for existing vocabulary | `tools/diki_prefetch.py`, `external_APIs/diki_lists.py` |
+| Current prefetch input | Discovers `.txt` lists, including books, from the configured words directory; does not query Anki for existing vocabulary | `tools/diki_prefetch.py`, `external_apis/diki_lists.py` |
 | Preparation | Bounded/resumable batches download HTML and then an advertised recording for exact matches | `tools/diki_prefetch.py` |
 | Scheduling | A launchd generator configures background runs independently of the UI | `tools/diki_launchd.py` |
-| Reporting | The dashboard measures local list coverage without fetching Diki content | `external_APIs/diki_lists.py`, `frontend/src/OfflineDownloads.tsx` |
+| Reporting | The dashboard measures local list coverage without fetching Diki content | `external_apis/diki_lists.py`, `frontend/src/OfflineDownloads.tsx` |
 | Offline mode | `DIKI_OFFLINE=1` prevents Diki fetching, including on missing resources | `DikiResources`, README |
 | Freshness | No automatic expiry; explicit successful refresh replaces the current resource for that key, rather than keeping a version history | `DikiResources.path`, `_save_locked`, prefetch `--refresh` |
 

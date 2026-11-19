@@ -3,28 +3,36 @@ import tempfile
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import Any, cast
 from unittest import TestCase
 from unittest.mock import Mock, patch
 
 import requests
 
 from backend.services import FactoryService, ServiceError
-from external_APIs.dikiApi import DikiApi
-from external_APIs.diki_lists import WordList, coverage, discover_lists
-from external_APIs.diki_resources import (
-    BLOCK_COOLDOWN, BatchDeadline, Blocked, CacheMiss, Deferred,
-    DikiResources, DikiServerError, DikiTimeout, NoAudio, ResourceError, file_lock,
+from external_apis.diki_api import DikiApi
+from external_apis.diki_lists import WordList, coverage, discover_lists
+from external_apis.diki_resources import (
+    BLOCK_COOLDOWN,
+    Blocked,
+    CacheMiss,
+    Deferred,
+    DikiResources,
+    DikiServerError,
+    DikiTimeout,
+    NoAudio,
+    ResourceError,
+    file_lock,
 )
 from tools.diki_launchd import configuration
 from tools.diki_prefetch import run_batch
-
 
 HTML = (Path(__file__).parent / "diki_cases" / "audio-take.html").read_bytes()
 MP3 = b"ID3\x04\x00\x00test-pronunciation"
 SUGGESTIONS = b'<div class="dictionarySuggestions"><a>take</a></div>'
 
 
-def response(content=HTML, status=200, headers=None):
+def response(content=HTML, status=200, headers=None) -> Any:
     result = requests.Response()
     result.status_code = status
     result.raw = io.BytesIO(content)
@@ -53,10 +61,16 @@ class TestDikiResources(TestCase):
         self.clock = Clock()
         self.get = Mock(return_value=response())
 
-    def resources(self, **kwargs):
-        defaults = dict(clock=self.clock, sleep=self.clock.sleep,
-                        uniform=lambda low, high: (low + high) / 2, get=self.get,
-                        profile="background", interval=20)
+    def resources(self, **kwargs) -> Any:
+        # Fixture transports expose mock methods in addition to the real API.
+        defaults: dict[str, Any] = {
+            "clock": self.clock,
+            "sleep": self.clock.sleep,
+            "uniform": lambda low, high: (low + high) / 2,
+            "get": self.get,
+            "profile": "background",
+            "interval": 20,
+        }
         defaults.update(kwargs)
         resources = DikiResources(self.root / "cache", **defaults)
         self.addCleanup(resources.close)
@@ -89,7 +103,10 @@ class TestDikiResources(TestCase):
         self.assertEqual((row["status"], row["exact_match"]), (404, 0))
 
     def test_real_dictionary_with_cloudflare_detection_script_is_not_a_block_page(self):
-        content = HTML + b'''<script>(function(){var u='/cdn-cgi/challenge-platform/scripts/jsd/main.js';})();</script>'''
+        content = (
+            HTML
+            + b"""<script>(function(){var u='/cdn-cgi/challenge-platform/scripts/jsd/main.js';})();</script>"""
+        )
         self.get.return_value = response(content)
         resources = self.resources()
         self.assertTrue(DikiApi(resources).lookup("take")[0])
@@ -124,7 +141,9 @@ class TestDikiResources(TestCase):
         resources = self.resources()
         result = run_batch(resources, [WordList("words_to_add.txt", ["stalled", "take"], 2)])
         self.assertEqual(result["status"], "partial")
-        self.assertEqual((result["attempted"], result["html"], result["audio"], result["errors"]), (2, 1, 1, 1))
+        self.assertEqual(
+            (result["attempted"], result["html"], result["audio"], result["errors"]), (2, 1, 1, 1)
+        )
         self.assertTrue(resources.metadata("take", "html")["exact_match"])
         self.assertEqual(resources.fetch_audio("take"), MP3)
         self.assertEqual(resources.setting("cooldown_until", 0), 0)
@@ -132,8 +151,12 @@ class TestDikiResources(TestCase):
     def test_batch_stops_after_three_consecutive_server_timeouts(self):
         self.get.side_effect = requests.ReadTimeout("Slow origin")
         resources = self.resources()
-        result = run_batch(resources, [WordList("words_to_add.txt", ["one", "two", "three", "four"], 4)])
-        self.assertEqual((result["status"], result["attempted"], result["errors"]), ("cooldown", 3, 3))
+        result = run_batch(
+            resources, [WordList("words_to_add.txt", ["one", "two", "three", "four"], 4)]
+        )
+        self.assertEqual(
+            (result["status"], result["attempted"], result["errors"]), ("cooldown", 3, 3)
+        )
         self.assertEqual(self.get.call_count, 3)
         self.assertIn("ReadTimeout", result["message"])
         self.assertGreater(resources.setting("cooldown_until"), self.clock())
@@ -161,19 +184,28 @@ class TestDikiResources(TestCase):
         for content, status, headers in [
             (b"rate limited", 429, {"Retry-After": "30000"}),
             (b"forbidden", 403, {}),
-            (b"<title>Just a moment...</title><script src='/cdn-cgi/challenge-platform/x'></script>", 200, {}),
+            (
+                b"<title>Just a moment...</title><script src='/cdn-cgi/challenge-platform/x'></script>",
+                200,
+                {},
+            ),
         ]:
             with self.subTest(status=status):
-                resources = DikiResources(self.root / str(status) / str(len(content)),
-                                          clock=self.clock, sleep=self.clock.sleep,
-                                          get=Mock(return_value=response(content, status, headers)))
+                resources = DikiResources(
+                    self.root / str(status) / str(len(content)),
+                    clock=self.clock,
+                    sleep=self.clock.sleep,
+                    get=Mock(return_value=response(content, status, headers)),
+                )
                 with self.assertRaises(Blocked):
                     resources.fetch_html("take")
                 self.assertFalse(resources.path("take", "html").exists())
-                self.assertGreaterEqual(resources.setting("cooldown_until"), self.clock() + BLOCK_COOLDOWN)
+                self.assertGreaterEqual(
+                    resources.setting("cooldown_until"), self.clock() + BLOCK_COOLDOWN
+                )
                 with self.assertRaises(Deferred):
                     resources.fetch_html("other")
-                self.assertEqual(resources.get.call_count, 1)
+                self.assertEqual(cast(Mock, resources.get).call_count, 1)
 
     def test_timeout_is_retryable_and_batch_does_not_treat_it_as_not_found(self):
         self.get.side_effect = requests.Timeout("timed out")
@@ -199,11 +231,15 @@ class TestDikiResources(TestCase):
 
     def test_audio_fallback_is_paced_and_no_recording_is_terminal_until_refresh(self):
         resources = self.resources()
-        resources._save("streamline", "html", HTML.replace(b"take", b"streamline"), 200, "fixture", True)
+        resources._save(
+            "streamline", "html", HTML.replace(b"take", b"streamline"), 200, "fixture", True
+        )
         self.get.side_effect = [response(b"not found", 404), response(MP3)]
         self.assertEqual(resources.fetch_audio("streamline"), MP3)
-        self.assertEqual([call.args[0].split("/images-common/")[1] for call in self.get.call_args_list],
-                         ["en/mp3/streamline.mp3", "en-ame/mp3/streamline.mp3"])
+        self.assertEqual(
+            [call.args[0].split("/images-common/")[1] for call in self.get.call_args_list],
+            ["en/mp3/streamline.mp3", "en-ame/mp3/streamline.mp3"],
+        )
         self.assertEqual(self.clock.waits, [20])
         resources._save("missing", "html", HTML.replace(b"take", b"missing"), 200, "fixture", True)
         self.get.side_effect = [response(b"not found", 404) for _ in range(2)]
@@ -251,7 +287,9 @@ class TestDikiResources(TestCase):
         resources = self.resources()
         resources.fetch_html("a & b? #")
         self.assertIn("q=a+%26+b%3F+%23", self.get.call_args.args[0])
-        self.assertTrue(self.get.call_args.kwargs["headers"]["User-Agent"].startswith("Mozilla/5.0"))
+        self.assertTrue(
+            self.get.call_args.kwargs["headers"]["User-Agent"].startswith("Mozilla/5.0")
+        )
         self.assertEqual(resources.path("../../outside", "audio").parent, resources.root / "audio")
 
     def test_missing_positive_audio_restarts_advertised_urls_instead_of_becoming_a_false_miss(self):
@@ -309,8 +347,10 @@ class TestDikiResources(TestCase):
         resources._save("tkae", "html", SUGGESTIONS, 404, "fixture")
         result = coverage(resources, lists)
         main, book, broken = result["lists"]
-        self.assertEqual((main["entries"], main["total"], main["html"], main["ready"], main["percent"]),
-                         (3, 2, 2, 1, 50))
+        self.assertEqual(
+            (main["entries"], main["total"], main["html"], main["ready"], main["percent"]),
+            (3, 2, 2, 1, 50),
+        )
         self.assertEqual(main["noExactMatch"], 1)
         self.assertEqual(book["percent"], 100)
         self.assertTrue(broken["error"])
@@ -320,26 +360,43 @@ class TestDikiResources(TestCase):
 
     def test_cached_resources_can_create_anki_note_without_network_or_media_directory(self):
         from tests.completion_helpers import install_completion
+
         resources = self.resources(offline=True)
         resources._save("take", "html", HTML, 200, "fixture", True)
         resources._save("take", "audio", MP3, 200, "fixture")
         service = FactoryService.__new__(FactoryService)
         install_completion(self, service)
         service.diki = DikiApi(resources)
-        service.diki.audio_path = None
         service.anki = Mock(last_error=None)
         service.anki.add_note.return_value = 123
         service.anki.store_media_file.return_value = "take.mp3"
         service.anki.sync.return_value = False  # Internet-offline AnkiWeb sync
         service.anki.invoke.return_value = "Test profile"
-        service.anki.get_note.return_value = {"noteId": 123, "modelName": "Basic", "tags": [],
-                                             "fields": {"Front": {"value": "take"}, "Audio": {"value": "[sound:take.mp3]"}}}
+        service.anki.get_note.return_value = {
+            "noteId": 123,
+            "modelName": "Basic",
+            "tags": [],
+            "fields": {"Front": {"value": "take"}, "Audio": {"value": "[sound:take.mp3]"}},
+        }
         service.anki.get_note_cards.return_value = [{"cardId": 1230, "deckName": "English"}]
         service.notes = Mock()
-        target = {"deckName": "English", "modelName": "Basic", "fieldMapping": {"audioField": "Audio"}}
+        target = {
+            "deckName": "English",
+            "modelName": "Basic",
+            "fieldMapping": {"audioField": "Audio"},
+        }
         self.assertTrue(service.diki.get_translations("take"))
-        result = service._perform_commit(target, {"Front": "take", "Audio": "[sound:take.mp3]"},
-                                         [], [], "create", None, "take", None, None)
+        result = service._perform_commit(
+            target,
+            {"Front": "take", "Audio": "[sound:take.mp3]"},
+            [],
+            [],
+            "create",
+            None,
+            "take",
+            None,
+            None,
+        )
         self.assertEqual(result["noteId"], 123)
         self.assertTrue(result["audioDownloaded"])
         self.assertTrue(result["syncPending"])
@@ -348,22 +405,49 @@ class TestDikiResources(TestCase):
 
     def test_offline_update_preserves_existing_sound_and_does_not_add_no_audio_tag(self):
         from tests.completion_helpers import install_completion
+
         service = FactoryService.__new__(FactoryService)
         install_completion(self, service)
         service.diki = DikiApi(self.resources(offline=True))
         service.anki = Mock(last_error=None)
         service.anki.invoke.return_value = "Test profile"
-        service.anki.get_note.return_value = {"noteId": 123, "modelName": "Basic", "tags": [],
-                                             "fields": {"Back": {"value": "brać"}, "Audio": {"value": "[sound:old.mp3]"}}}
+        service.anki.get_note.return_value = {
+            "noteId": 123,
+            "modelName": "Basic",
+            "tags": [],
+            "fields": {"Back": {"value": "brać"}, "Audio": {"value": "[sound:old.mp3]"}},
+        }
         service.anki.get_note_cards.return_value = [{"cardId": 1230, "deckName": "English"}]
         service.notes = Mock()
-        existing = {"modelName": "Basic", "fields": {"Audio": {"value": "[sound:old.mp3]"}}, "tags": []}
-        target = {"deckName": "English", "modelName": "Basic", "fieldMapping": {"audioField": "Audio"}}
-        with patch.object(service, "_note_details", return_value={
-            "note": existing, "cards": service.anki.get_note_cards.return_value,
-        }):
-            service._perform_commit(target, {"Back": "brać", "Audio": "[sound:take.mp3]"},
-                                    [], [], "update", 123, "take", None, None)
+        existing = {
+            "modelName": "Basic",
+            "fields": {"Audio": {"value": "[sound:old.mp3]"}},
+            "tags": [],
+        }
+        target = {
+            "deckName": "English",
+            "modelName": "Basic",
+            "fieldMapping": {"audioField": "Audio"},
+        }
+        with patch.object(
+            service,
+            "_note_details",
+            return_value={
+                "note": existing,
+                "cards": service.anki.get_note_cards.return_value,
+            },
+        ):
+            service._perform_commit(
+                target,
+                {"Back": "brać", "Audio": "[sound:take.mp3]"},
+                [],
+                [],
+                "update",
+                123,
+                "take",
+                None,
+                None,
+            )
         service.anki.update_note_fields.assert_called_once_with(123, {"Back": "brać"})
         service.anki.add_tag_to_note.assert_not_called()
         self.get.assert_not_called()

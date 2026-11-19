@@ -1,7 +1,6 @@
 import os
 from pathlib import Path
 
-
 ROOT_DIR = Path(__file__).resolve().parent.parent
 
 
@@ -33,8 +32,3 @@ def legacy_index_path() -> Path | None:
 
 def configured_words_to_add_path() -> Path:
     return ROOT_DIR / "words_to_add" / "words_to_add.txt"
-
-
-def configured_prepared_words_path() -> Path | None:
-    configured = os.getenv("PREPARED_WORDS_PATH")
-    return project_path(configured) if configured else None

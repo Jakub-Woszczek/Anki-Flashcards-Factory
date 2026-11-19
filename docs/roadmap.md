@@ -1,6 +1,6 @@
 # Future work and deferred discussions
 
-Last updated: 2026-11-17.
+Last updated: 2026-11-19.
 
 This is a small record of future work explicitly mentioned by the owner during
 the handbook walkthrough. Entries are not an implementation authorization or an
@@ -50,10 +50,10 @@ word during processing, including possible-spelling choices, which is preferred
 over vetting an entire list in advance. CLI capture already resolves the English
 entry before appending it, so captured words are Diki-compatible input.
 
-Status: deprecated, pending a separate retirement review recorded as `L-001` in
-[to-do](../to-do). Legacy code, entry points, files, and references remain in the
-repository during this documentation walkthrough. No deletion/data migration is
-being performed here.
+Status: **completed 2026-11-19** as `L-001`. The owner explicitly approved deleting
+`RawNotesEditor.py`, `raw_notes/`, and `prepared_notes/`, including their contents.
+The implementation, CLI option/import, obsolete configuration helpers, and raw-editor
+test module have been removed. See the combined cleanup record below.
 
 ## Obsolete initial live tests (`T-001`)
 
@@ -65,13 +65,34 @@ research were early attempts to test the initial application and may be deleted:
 - `TestRawNotesEditor.test_diki_possible_spellings`
 
 They originate in initial commit `d301a5d` (2025-09-23), before the later test
-organization. Record their deletion as `T-001` in [to-do](../to-do), for a separate
-cleanup session under the documentation-only walkthrough rule. This is permission
-to retire these three methods, not a request to delete all integration tests or
-the remaining read-only Anki inspection methods.
+organization. Status: **completed 2026-11-19** as `T-001`. During the later cleanup,
+the owner also approved retiring the manual index-maintenance workflow. Its two
+read-only Anki inspection tests were removed with their scan helpers, so both legacy
+test modules are now gone. The two explicit opt-in live Diki checks remain.
 
-Status: owner-approved retirement, not implemented. The broader test boundary is
-now accepted and separately tracked as `T-002` below.
+## Completed legacy-code cleanup (2026-11-19)
+
+In a separate implementation session the owner approved removing all inspected
+cleanup candidates (A–E):
+
+- Whole-list preprocessing and its vocabulary directories (`L-001`).
+- Manual local-index inspection, import, and deletion commands under `main.py --db`,
+  including the special digit/`C2` deck filter and exclusive scan helpers.
+- The uncalled `external_APIs/ankiUtils.py` inspection helpers.
+- Direct-to-folder MP3 export (`diki_audio_harness`) and its dedicated tests.
+- Unused fixed-model note-creation and deck-moving wrappers and their smoke tests.
+- Unused redundancy/path/URL helpers, no-op index-save compatibility code, and
+  stale client attributes/example data.
+
+The browser's active local-index lookup/add/delete operations and legacy JSON
+index import remain. Audio still uses the shared cache and AnkiConnect upload to
+the active profile; refresh still preserves original decks.
+
+Verification: full unittest discovery ran 107 tests, with 2 opt-in live Diki tests
+skipped and no failures, while socket connections were blocked by a temporary
+test-process guard. `python main.py --help` exposes only the browser-app options.
+An initial run with application-wide `DIKI_OFFLINE=1` blocked mocked-download paths;
+the successful run unset that override. No live Anki/Diki checks were performed.
 
 ## Test boundary enforcement (`T-002`)
 
@@ -79,11 +100,21 @@ Accepted rule: routine automated tests run offline against saved Diki fixtures
 and fake Anki responses. Real Diki/Anki checks, including read-only collection
 queries, must be explicitly invoked integration checks.
 
-Current test organization does not yet enforce that boundary for all discovery.
-Status: confirmed rule with implementation work recorded as `T-002` in
-[to-do](../to-do), to be implemented separately. Retiring the three original smoke
-methods (`T-001`) and handling the remaining live readers are distinct scopes.
-See [development and verification](development.md).
+Status: **completed 2026-11-19** during the follow-up repository/tooling cleanup.
+`python -m tools.test_offline` now guards discovery and tests against socket/DNS
+access and forces live checks off. It is used by the shared check command, local
+Python hooks, and CI. Dedicated regressions test the guard. Direct unittest remains
+available for explicitly requested integrations. See [development and verification](development.md).
+
+## Completed repository hygiene and quality tooling (2026-11-19)
+
+The owner approved a behavior-preserving cleanup: move the index into
+`backend/note_index.py`, normalize integration/test module names, remove tracked
+IDE/macOS artifacts from Git while retaining local copies, and simplify ignore
+rules. Existing launcher commands, resource directories, and collection contracts
+are preserved. Shared VS Code overrides are workspace-scoped; global settings stay
+untouched. Pinned development tools, reviewed lint/format/type corrections, local
+hooks, a single full-check command, and a macOS CI job make verification repeatable.
 
 ## Simplify failed confirmation after acknowledged creation (`S-001`)
 

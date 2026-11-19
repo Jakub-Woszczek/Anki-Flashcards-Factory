@@ -1,6 +1,6 @@
 # Architecture and operating constraints
 
-Last updated: 2026-11-17.
+Last updated: 2026-11-19.
 
 Status: owner-confirmed deployment/scope and state-ownership decisions, with a
 source-inspected component map. This is not a claim that every path has been
@@ -47,15 +47,20 @@ The cache serves prepared source material locally; it does not make the optional
 LLM or AnkiWeb services available offline.
 
 Key locations: `main.py`, `backend/app.py`, `backend/services.py`,
-`frontend/src/App.tsx`, `external_APIs/`, and `tools/`.
+`frontend/src/App.tsx`, `external_apis/`, and `tools/`. The active local note index
+lives in `backend/note_index.py`; `main.py` remains the root browser launcher.
+Integration and test module names use snake_case. Module moves preserve project-root
+resolution, CLI commands, resource paths, and collection contracts.
 
-### Deprecated entry point
+### Retired legacy workflows
 
-`RawNotesEditor.py`, `main.py --app -e`, and the raw/prepared-file workflow remain
-in the tree but are owner-confirmed deprecated. English-word resolution now
-belongs to dictionary CLI capture or the browser's current-word processing.
-Retirement is recorded separately as `L-001`; retained legacy code is not an
-active architectural requirement.
+`RawNotesEditor.py`, `main.py --app -e`, and the raw/prepared-file workflow were
+removed on 2026-11-19 (`L-001`), including their vocabulary directories. English-word
+resolution belongs to dictionary CLI capture or the browser's current-word processing.
+The manual `main.py --db` maintenance CLI, standalone Anki inspection helpers,
+direct-folder audio export, and unused fixed-model/deck-moving wrappers were also
+retired. Active browser index operations and cached audio upload remain. See the
+[cleanup record](roadmap.md#completed-legacy-code-cleanup-2026-11-19).
 
 ## State ownership
 
@@ -102,7 +107,7 @@ rare failure with a blocking recovery flow.
 - Prefetch discovers text lists, without the intended bounded-buffer-to-existing-note preparation tier.
 - Failed follow-up confirmation currently blocks acknowledged-create completion; intended behavior is warning-and-continue (`S-001`).
 - Detailed review-completion mechanics and some failure/preservation rules still need owner input.
-- The default offline/isolated test boundary is confirmed; enforcing separation from explicit live integration checks remains `T-002`. See [development](development.md).
+- The standard checks, hooks, and CI enforce the offline test boundary through `tools.test_offline` (`T-002`). See [development](development.md).
 
 See the [feature map](features.md), [contracts](index.md#rules-and-reference),
 [roadmap](roadmap.md), and [to-do list](../to-do). Current walkthrough work records

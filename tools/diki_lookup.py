@@ -1,22 +1,23 @@
 #!/usr/bin/env python3
-import sys
 import os
 import signal
+import sys
 from contextlib import contextmanager
 from pathlib import Path
 
 # Allow importing from project root regardless of where the script is called from
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from external_APIs.dikiApi import DikiApi
 from dotenv import load_dotenv
-from external_APIs.diki_resources import DikiResources, DikiTimeout, ROOT
-from backend.word_list import append_word
 from rich.console import Console
 from rich.padding import Padding
 from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
+
+from backend.word_list import append_word
+from external_apis.diki_api import DikiApi
+from external_apis.diki_resources import ROOT, DikiResources, DikiTimeout
 
 WORDS_FILE = os.path.join(os.path.dirname(__file__), "..", "words_to_add", "words_to_add.txt")
 
@@ -25,12 +26,13 @@ LOOKUP_TIMEOUT = 30
 
 
 @contextmanager
-def lookup_timeout(seconds=LOOKUP_TIMEOUT):
+def lookup_timeout(seconds: float = LOOKUP_TIMEOUT):
     """CLI/main-thread wall-clock limit, including DNS, locks and trickled bodies.
 
     Requests' read timeout alone only bounds inactivity, not the entire lookup.
     This command already targets Unix (the resource layer uses flock).
     """
+
     def timed_out(signum, frame):
         raise DikiTimeout(f"Diki lookup timed out after {seconds:g}s; try again later")
 
@@ -80,7 +82,7 @@ def display_meanings(word, meanings):
 
 def load_existing_words():
     try:
-        with open(WORDS_FILE, "r") as f:
+        with open(WORDS_FILE) as f:
             return {line.strip().lower() for line in f if line.strip()}
     except FileNotFoundError:
         return set()
@@ -97,7 +99,7 @@ def ask_save(word):
         return
     if answer == "y":
         if append_word(Path(WORDS_FILE), word):
-            console.print(f"[green]✓[/green] Appended to words_to_add.txt")
+            console.print("[green]✓[/green] Appended to words_to_add.txt")
         else:
             console.print(f"[yellow]'{word}' is already in words_to_add.txt[/yellow]")
 
@@ -141,6 +143,7 @@ def run_lookup(api, phrase):
         return
 
     # No exact match — look for similar words
+    spellings: set[str] = set()
     try:
         with lookup_timeout():
             spellings = api.possible_spellings(phrase)
@@ -155,7 +158,7 @@ def run_lookup(api, phrase):
         console.print(f"[red]No results found for '{phrase}'.[/red]")
         sys.exit(1)
 
-    console.print(f"\n[yellow]No exact match.[/yellow] Did you mean:")
+    console.print("\n[yellow]No exact match.[/yellow] Did you mean:")
     chosen = pick_from_list(spellings)
 
     if chosen is None:

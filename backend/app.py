@@ -1,5 +1,4 @@
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Request
@@ -9,8 +8,8 @@ from fastapi.staticfiles import StaticFiles
 
 from backend.schemas import (
     CommitRequest,
-    CustomCardRequest,
     CurrentPatchRequest,
+    CustomCardRequest,
     DeckContextRequest,
     GeminiRequest,
     GeminiReviewRequest,
@@ -28,8 +27,7 @@ from backend.schemas import (
 )
 from backend.services import FactoryService, ServiceError
 from backend.settings import ROOT_DIR, configured_words_to_add_path
-from external_APIs.diki_lists import coverage
-
+from external_apis.diki_lists import coverage
 
 load_dotenv(ROOT_DIR / ".env")
 service = FactoryService()
@@ -79,12 +77,16 @@ def shutdown_app(
 ):
     # A non-simple header prevents another website from issuing this local shutdown request.
     if x_anki_factory_shutdown != "true":
-        raise HTTPException(status_code=403, detail="Shutdown requests must come from the Factory UI")
+        raise HTTPException(
+            status_code=403, detail="Shutdown requests must come from the Factory UI"
+        )
     result = service.flush_sync()
     app.state.shutdown_sync_flushed = True
     server = getattr(app.state, "uvicorn_server", None)
     if server is None:
-        raise HTTPException(status_code=409, detail="This server cannot be stopped from the browser")
+        raise HTTPException(
+            status_code=409, detail="This server cannot be stopped from the browser"
+        )
     background_tasks.add_task(setattr, server, "should_exit", True)
     return result
 
@@ -181,7 +183,9 @@ def skip_current(session_id: str):
 
 @app.post("/backend/sessions/{session_id}/current/custom-card")
 def create_custom_card(session_id: str, request: CustomCardRequest):
-    return service.create_custom_card(session_id, request.deckName, request.modelName, request.fields)
+    return service.create_custom_card(
+        session_id, request.deckName, request.modelName, request.fields
+    )
 
 
 @app.post("/backend/gemini/translate")
@@ -191,7 +195,9 @@ def gemini_translate(request: GeminiRequest):
 
 @app.post("/backend/gemini/review-translations")
 def gemini_review(request: GeminiReviewRequest):
-    return service.gemini_review(request.word, request.currentTranslation, request.proposedTranslations)
+    return service.gemini_review(
+        request.word, request.currentTranslation, request.proposedTranslations
+    )
 
 
 @app.get("/backend/review/inventory")
@@ -216,7 +222,9 @@ def review_item_existing_note(request: ReviewItemExistingNoteRequest):
 
 @app.post("/backend/review/item/preview")
 def review_item_preview(request: ReviewItemPreviewRequest):
-    return service.review_item_preview(request.draft, request.deckName, request.modelName, request.fieldMapping)
+    return service.review_item_preview(
+        request.draft, request.deckName, request.modelName, request.fieldMapping
+    )
 
 
 @app.post("/backend/review/item/commit")

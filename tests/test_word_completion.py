@@ -2,13 +2,14 @@ import copy
 import tempfile
 import threading
 from pathlib import Path
+from typing import Any
 from unittest import TestCase
 from unittest.mock import Mock, patch
 
 from backend.services import FactoryService, ServiceError
 from backend.word_completion import VerificationError, WordCompletion
 from backend.word_list import append_word, atomic_write
-from external_APIs.diki_resources import NoAudio
+from external_apis.diki_resources import NoAudio
 from tools.clean_words_to_add import clean
 
 
@@ -35,9 +36,12 @@ class MemoryAnki:
 
     def add_note(self, deck, model, fields, tags=None):
         self.add_calls += 1
-        self.notes[123] = {"noteId": 123, "modelName": model,
-                           "fields": {name: {"value": value} for name, value in fields.items()},
-                           "tags": list(tags or [])}
+        self.notes[123] = {
+            "noteId": 123,
+            "modelName": model,
+            "fields": {name: {"value": value} for name, value in fields.items()},
+            "tags": list(tags or []),
+        }
         self.decks[123] = deck
         if self.timeout_after_add:
             self.last_error = "Timed out after Anki accepted the note"
@@ -57,21 +61,20 @@ class MemoryAnki:
 
     def get_note_cards(self, note_id):
         self.last_error = None
-        return copy.deepcopy(self.cards.get(note_id, [{"cardId": note_id * 10, "deckName": self.decks[note_id]}]))
+        return copy.deepcopy(
+            self.cards.get(note_id, [{"cardId": note_id * 10, "deckName": self.decks[note_id]}])
+        )
 
     def update_note_fields(self, note_id, fields):
-        self.notes[note_id]["fields"].update({name: {"value": value} for name, value in fields.items()})
+        self.notes[note_id]["fields"].update(
+            {name: {"value": value} for name, value in fields.items()}
+        )
 
     def add_tag_to_note(self, note_id, tag):
         self.notes[note_id]["tags"].append(tag)
 
     def remove_tag_from_note(self, note_id, tag):
         self.notes[note_id]["tags"].remove(tag)
-
-    def change_note_deck(self, note_id, deck):
-        self.decks[note_id] = deck
-        for card in self.cards.get(note_id, []):
-            card["deckName"] = deck
 
     def model_schema(self, model):
         return {"name": model, "fields": ["en_word", "pl_translation", "audio_en"]}
@@ -90,20 +93,34 @@ class TestWordCompletion(TestCase):
         self.words.write_bytes(self.original)
         self.store = WordCompletion(self.root / "test.sqlite3", self.words)
         self.anki = MemoryAnki()
-        self.service = FactoryService.__new__(FactoryService)
+        self.service: Any = FactoryService.__new__(FactoryService)
         self.service.completions = self.store
         self.service.anki = self.anki
         self.service.notes = Mock()
         self.service.diki = Mock(last_error="Audio unavailable")
         self.service.diki.fetch_audio.side_effect = NoAudio("Audio unavailable")
-        self.target = {"deckName": "English", "modelName": "Basic",
-                       "fieldMapping": {"englishField": "en_word", "translationField": "pl_translation",
-                                        "audioField": "audio_en"}}
+        self.target = {
+            "deckName": "English",
+            "modelName": "Basic",
+            "fieldMapping": {
+                "englishField": "en_word",
+                "translationField": "pl_translation",
+                "audioField": "audio_en",
+            },
+        }
 
     def commit(self, action="create", note_id=None):
         return self.service._perform_commit(
-            self.target, {"en_word": "take", "pl_translation": "brać", "audio_en": "[sound:take.mp3]"},
-            ["test"], [], action, note_id, "take", None, None)
+            self.target,
+            {"en_word": "take", "pl_translation": "brać", "audio_en": "[sound:take.mp3]"},
+            ["test"],
+            [],
+            action,
+            note_id,
+            "take",
+            None,
+            None,
+        )
 
     def test_read_back_archives_exact_lines_and_preserves_remaining_bytes(self):
         result = self.commit()
@@ -112,9 +129,14 @@ class TestWordCompletion(TestCase):
         self.assertEqual(self.words.read_bytes(), b"\r\nkeep  this\r\nlast")
         self.assertEqual(Path(result["backupPath"]).read_bytes(), self.original)
         with self.store.connect() as db:
-            archived = db.execute("SELECT original_line FROM word_list_archive ORDER BY line_number").fetchall()
+            archived = db.execute(
+                "SELECT original_line FROM word_list_archive ORDER BY line_number"
+            ).fetchall()
             self.assertEqual([row[0] for row in archived], [b"Take\r\n", b" take \r\n"])
-            self.assertEqual(tuple(db.execute("SELECT en_word,note_id FROM note_index").fetchone()), ("take", 123))
+            self.assertEqual(
+                tuple(db.execute("SELECT en_word,note_id FROM note_index").fetchone()),
+                ("take", 123),
+            )
             self.assertEqual(db.execute("SELECT state FROM word_saves").fetchone()[0], "cleaned")
 
     def test_read_back_failure_retains_word_and_retry_does_not_add_again(self):
@@ -151,17 +173,28 @@ class TestWordCompletion(TestCase):
         self.assertEqual(self.words.read_bytes(), self.original)
 
     def test_every_submitted_field_model_tags_and_deck_are_verified(self):
-        self.anki.add_note("English", "Basic", {"en_word": "take", "pl_translation": "brać"}, ["test"])
-        expected = {"deckName": "English", "modelName": "Basic",
-                    "fields": {"en_word": "take", "pl_translation": "brać"}, "tags": ["test"], "removeTags": ["old"]}
-        cases = [lambda: self.anki.notes[123]["fields"]["pl_translation"].update(value="wrong"),
-                 lambda: self.anki.notes[123].update(modelName="Wrong model"),
-                 lambda: self.anki.notes[123].update(tags=[]),
-                 lambda: self.anki.notes[123].update(tags=["test", "old"]),
-                 lambda: self.anki.decks.update({123: "Other deck"})]
+        self.anki.add_note(
+            "English", "Basic", {"en_word": "take", "pl_translation": "brać"}, ["test"]
+        )
+        expected = {
+            "deckName": "English",
+            "modelName": "Basic",
+            "fields": {"en_word": "take", "pl_translation": "brać"},
+            "tags": ["test"],
+            "removeTags": ["old"],
+        }
+        cases = [
+            lambda: self.anki.notes[123]["fields"]["pl_translation"].update(value="wrong"),
+            lambda: self.anki.notes[123].update(modelName="Wrong model"),
+            lambda: self.anki.notes[123].update(tags=[]),
+            lambda: self.anki.notes[123].update(tags=["test", "old"]),
+            lambda: self.anki.decks.update({123: "Other deck"}),
+        ]
         for change in cases:
             with self.subTest(change=change):
-                self.anki.add_note("English", "Basic", {"en_word": "take", "pl_translation": "brać"}, ["test"])
+                self.anki.add_note(
+                    "English", "Basic", {"en_word": "take", "pl_translation": "brać"}, ["test"]
+                )
                 change()
                 with self.assertRaises(VerificationError):
                     self.store.compare(self.anki, 123, expected)
@@ -171,8 +204,10 @@ class TestWordCompletion(TestCase):
 
         def corrupted(note_id):
             note = real_get(note_id)
+            assert note is not None
             note["fields"]["pl_translation"]["value"] = "wrong"
             return note
+
         with patch.object(self.anki, "get_note", side_effect=corrupted):
             with self.assertRaisesRegex(ServiceError, "field pl_translation"):
                 self.commit()
@@ -186,6 +221,7 @@ class TestWordCompletion(TestCase):
             if path == self.words:
                 raise OSError("disk busy")
             atomic_write(path, content)
+
         with patch("backend.word_completion.atomic_write", side_effect=fail_replacement):
             result = self.commit()
         self.assertTrue(result["cleanupPending"])
@@ -211,8 +247,12 @@ class TestWordCompletion(TestCase):
         self.assertNotIn(b"take", self.words.read_bytes().lower())
 
     def test_update_preserves_existing_audio_and_checks_final_state(self):
-        self.anki.add_note("Old deck", "Basic", {"en_word": "take", "pl_translation": "old",
-                                                "audio_en": "[sound:old.mp3]"}, ["old"])
+        self.anki.add_note(
+            "Old deck",
+            "Basic",
+            {"en_word": "take", "pl_translation": "old", "audio_en": "[sound:old.mp3]"},
+            ["old"],
+        )
         result = self.commit("update", 123)
         self.assertTrue(result["verified"])
         self.assertEqual(self.anki.notes[123]["fields"]["audio_en"]["value"], "[sound:old.mp3]")
@@ -221,18 +261,18 @@ class TestWordCompletion(TestCase):
 
     def test_update_preserves_original_deck_instead_of_queue_target(self):
         self.anki.add_note("Old deck", "Basic", {"en_word": "take", "pl_translation": "old"}, [])
-        with patch.object(self.anki, "change_note_deck", wraps=self.anki.change_note_deck) as move:
-            result = self.commit("update", 123)
+        result = self.commit("update", 123)
         self.assertTrue(result["verified"])
         self.assertEqual(self.anki.decks[123], "Old deck")
         self.assertEqual(self.anki.notes[123]["fields"]["pl_translation"]["value"], "brać")
         self.assertEqual(result["noteId"], 123)
-        move.assert_not_called()
 
     def test_update_preserves_sibling_cards_in_different_decks(self):
         self.anki.add_note("Old deck", "Basic", {"en_word": "take", "pl_translation": "old"}, [])
-        cards = [{"cardId": 1230, "deckName": "Old deck"},
-                 {"cardId": 1231, "deckName": "Reverse deck"}]
+        cards = [
+            {"cardId": 1230, "deckName": "Old deck"},
+            {"cardId": 1231, "deckName": "Reverse deck"},
+        ]
         self.anki.cards[123] = copy.deepcopy(cards)
         result = self.commit("update", 123)
         self.assertTrue(result["verified"])
@@ -272,10 +312,15 @@ class TestWordCompletion(TestCase):
     def test_review_update_preserves_original_deck(self):
         self.anki.add_note("Old deck", "Basic", {"en_word": "take", "pl_translation": "old"}, [])
         result = self.service.review_item_commit(
-            note_id=123, card_id=None,
+            note_id=123,
+            card_id=None,
             draft={"word": "take", "groups": [[{"value": "brać", "selected": True}]], "tags": []},
-            action="update", remove_tags=[], flag=None, deck_name=self.target["deckName"],
-            model_name=self.target["modelName"], field_mapping=self.target["fieldMapping"],
+            action="update",
+            remove_tags=[],
+            flag=None,
+            deck_name=self.target["deckName"],
+            model_name=self.target["modelName"],
+            field_mapping=self.target["fieldMapping"],
         )
         self.assertTrue(result["verified"])
         self.assertEqual(self.anki.decks[123], "Old deck")
@@ -304,8 +349,16 @@ class TestWordCompletion(TestCase):
 
     def test_cleanup_pending_keeps_session_item(self):
         self.service.sessions = Mock()
-        session = {**self.target, "mode": "add", "current": {"word": "take"},
-                   "draft": {"word": "take", "groups": [[{"value": "brać", "selected": True}]], "tags": []}}
+        session = {
+            **self.target,
+            "mode": "add",
+            "current": {"word": "take"},
+            "draft": {
+                "word": "take",
+                "groups": [[{"value": "brać", "selected": True}]],
+                "tags": [],
+            },
+        }
         self.service.session = lambda _: session
         self.service.notes.get_note_id.return_value = None
         with patch.object(self.store, "cleanup", side_effect=OSError("disk busy")):

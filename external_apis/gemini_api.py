@@ -1,4 +1,5 @@
 import os
+
 from google import genai
 from rich.console import Console
 from rich.markdown import Markdown
@@ -13,7 +14,6 @@ class GeminiBot:
             self.client = None  # No client if key missing
 
         self.model = "gemini-3-flash-preview"
-        self.bot_question = "Napisz jedno zdanie o jednorożcu"
         self.console = Console()
 
     def get_answer(self, question):
@@ -26,8 +26,9 @@ class GeminiBot:
                 contents=question,
             )
             return response.text
-        except Exception as e:
-            return f"error: {str(e)}"
+        # The optional SDK integration reports failures as advisory text.
+        except Exception as e:  # noqa: BLE001
+            return f"error: {e!s}"
 
     @staticmethod
     def word_translation_prompt(word: str, diki_translations: list[list[str]]) -> str:
@@ -52,6 +53,8 @@ class GeminiBot:
             print(description)
             return description
 
-        markdown_renderable = Markdown(description)
+        # Empty SDK responses have no agreed fallback; retain the existing renderer
+        # behavior rather than change that edge case during a structural cleanup.
+        markdown_renderable = Markdown(description)  # pyright: ignore[reportArgumentType]
         self.console.print(markdown_renderable)
         return description

@@ -6,17 +6,33 @@ import time
 
 from dotenv import load_dotenv
 
-from external_APIs.diki_lists import coverage, discover_lists
-from external_APIs.diki_resources import (
-    ROOT, BatchDeadline, Blocked, Deferred, DikiResources, DikiServerError, DikiTimeout,
-    NoAudio, ResourceError, file_lock,
+from external_apis.diki_lists import coverage, discover_lists
+from external_apis.diki_resources import (
+    ROOT,
+    BatchDeadline,
+    Blocked,
+    Deferred,
+    DikiResources,
+    DikiServerError,
+    DikiTimeout,
+    NoAudio,
+    ResourceError,
+    file_lock,
 )
 
 
 def run_batch(resources, lists, *, batch_size=25, refresh=False):
-    summary = {"startedAt": resources.clock(), "finishedAt": None, "status": "running",
-               "attempted": 0, "html": 0, "audio": 0, "noAudio": 0,
-               "errors": 0, "message": None}
+    summary = {
+        "startedAt": resources.clock(),
+        "finishedAt": None,
+        "status": "running",
+        "attempted": 0,
+        "html": 0,
+        "audio": 0,
+        "noAudio": 0,
+        "errors": 0,
+        "message": None,
+    }
     try:
         with file_lock(resources.root / "prefetch.lock", blocking=False):
             resources.set_setting("last_run", summary)
@@ -25,7 +41,9 @@ def run_batch(resources, lists, *, batch_size=25, refresh=False):
             except BatchDeadline as error:
                 summary.update(status="time_limit", message=str(error))
             except KeyboardInterrupt:
-                summary.update(status="interrupted", message="Interrupted; downloads will resume next run")
+                summary.update(
+                    status="interrupted", message="Interrupted; downloads will resume next run"
+                )
             except (OSError, ValueError) as error:
                 summary.update(status="error", message=str(error))
             finally:
@@ -34,8 +52,11 @@ def run_batch(resources, lists, *, batch_size=25, refresh=False):
                 summary["finishedAt"] = resources.clock()
                 resources.set_setting("last_run", summary)
     except BlockingIOError:
-        summary.update(status="already_running", finishedAt=resources.clock(),
-                       message="Another prefetch process is running")
+        summary.update(
+            status="already_running",
+            finishedAt=resources.clock(),
+            message="Another prefetch process is running",
+        )
     return summary
 
 
@@ -44,14 +65,20 @@ def _download_batch(resources, lists, summary, batch_size, refresh):
         summary.update(status="offline", message="DIKI_OFFLINE is enabled; no downloads attempted")
         return
     if resources.setting("cooldown_until", 0) > resources.clock():
-        summary.update(status="paused", message=resources.pause_message() + "; no request attempted")
+        summary.update(
+            status="paused", message=resources.pause_message() + "; no request attempted"
+        )
         return
     snapshot = resources.snapshot()
     words = dict.fromkeys(word for source in lists for word in source.words)
     # Fresh work goes ahead of previously failed resources; main-list ordering is
     # retained within each group so a failing head word cannot starve book lists.
-    ordered = sorted(words, key=lambda word: any(
-        snapshot.get((word, kind), {}).get("state") == "error" for kind in ("html", "audio")))
+    ordered = sorted(
+        words,
+        key=lambda word: any(
+            snapshot.get((word, kind), {}).get("state") == "error" for kind in ("html", "audio")
+        ),
+    )
     consecutive_failures = 0
     for word in ordered:
         html = snapshot.get((word, "html"), {})
@@ -123,19 +150,35 @@ def main(argv=None):
     load_dotenv(ROOT / ".env")
     parser = argparse.ArgumentParser(description="Cache Diki HTML and MP3s for all word lists")
     parser.add_argument("--batch-size", type=int, default=25)
-    parser.add_argument("--max-runtime", type=float, default=600, help="Seconds, including request spacing")
-    parser.add_argument("--words-dir", help="Folder of .txt lists (recursive); main list takes priority")
-    parser.add_argument("--cache-dir", help="Shared cache directory, also configurable with DIKI_CACHE_DIR")
-    parser.add_argument("--refresh", action="store_true", help="Explicitly re-fetch resources, including confirmed misses")
-    parser.add_argument("--report", action="store_true", help="Print local coverage without network requests")
+    parser.add_argument(
+        "--max-runtime", type=float, default=600, help="Seconds, including request spacing"
+    )
+    parser.add_argument(
+        "--words-dir", help="Folder of .txt lists (recursive); main list takes priority"
+    )
+    parser.add_argument(
+        "--cache-dir", help="Shared cache directory, also configurable with DIKI_CACHE_DIR"
+    )
+    parser.add_argument(
+        "--refresh",
+        action="store_true",
+        help="Explicitly re-fetch resources, including confirmed misses",
+    )
+    parser.add_argument(
+        "--report", action="store_true", help="Print local coverage without network requests"
+    )
     args = parser.parse_args(argv)
     if args.batch_size < 1 or args.max_runtime <= 0:
         parser.error("batch-size and max-runtime must be positive")
     lists = discover_lists(args.words_dir)
-    with DikiResources(args.cache_dir, profile="background",
-                       deadline=time.time() + args.max_runtime) as resources:
-        result = coverage(resources, lists) if args.report else run_batch(
-            resources, lists, batch_size=args.batch_size, refresh=args.refresh)
+    with DikiResources(
+        args.cache_dir, profile="background", deadline=time.time() + args.max_runtime
+    ) as resources:
+        result = (
+            coverage(resources, lists)
+            if args.report
+            else run_batch(resources, lists, batch_size=args.batch_size, refresh=args.refresh)
+        )
     print(json.dumps(result, indent=2, ensure_ascii=False))
     return 1 if result.get("status") in {"error", "source_error"} else 0
 

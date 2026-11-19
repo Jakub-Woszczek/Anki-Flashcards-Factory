@@ -2,7 +2,6 @@
 
 import re
 
-
 CONTRACT_VERSION = 3
 NOTE_TYPES = ("Basic [reverse+audio]", "Basic [reverse+audio+image]")
 EN_WORD_PATTERN = re.compile(r"[A-Za-z '’.,!?-]+")
@@ -11,7 +10,8 @@ EN_WORD_PATTERN = re.compile(r"[A-Za-z '’.,!?-]+")
 def parse_en_word(value: str) -> str:
     """Return the original phrase, or raise ValueError; never silently clean it."""
     if not isinstance(value, str):
-        raise ValueError("Expected a plain-text string")
+        # The stored-field contract specifies ValueError for every invalid value.
+        raise ValueError("Expected a plain-text string")  # noqa: TRY004
     if not value:
         raise ValueError("Required field is empty")
     if "<" in value or ">" in value:
@@ -26,5 +26,7 @@ def parse_en_word(value: str) -> str:
     if not re.search(r"[A-Za-z]", value):
         raise ValueError("The phrase must contain at least one letter")
     if re.search(r"(?<=[^A-Za-z])['’]|['’](?![A-Za-z]|-)", value):
-        raise ValueError("Apostrophes must follow a letter or start the phrase, and precede a letter or hyphen")
+        raise ValueError(
+            "Apostrophes must follow a letter or start the phrase, and precede a letter or hyphen"
+        )
     return value

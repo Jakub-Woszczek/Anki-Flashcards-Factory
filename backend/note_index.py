@@ -1,10 +1,9 @@
 import json
 import shutil
 import sqlite3
-from pathlib import Path
 
 from backend.settings import database_path, legacy_index_path
-from external_APIs.ankiConnect import AnkiConnect
+from external_apis.anki_connect import AnkiConnect
 
 
 class NotesDatabase:
@@ -54,7 +53,8 @@ class NotesDatabase:
         try:
             entries = json.loads(legacy_path.read_text(encoding="utf-8"))
             if not isinstance(entries, list):
-                raise ValueError("Legacy index must be a list")
+                # Keep the existing ValueError-to-DatabaseLoadError conversion below.
+                raise ValueError("Legacy index must be a list")  # noqa: TRY004
         except (OSError, json.JSONDecodeError, ValueError) as error:
             raise DatabaseLoadError("Legacy JSON index could not be imported") from error
 
@@ -87,10 +87,6 @@ class NotesDatabase:
         except sqlite3.Error as error:
             raise DatabaseLoadError("Database contents could not be loaded") from error
 
-    def save_db(self):
-        # SQLite writes are committed per operation. Keep the legacy public method.
-        self.load_db()
-
     def is_in_db(self, word: str) -> bool:
         """Check if a word appears already in db"""
         return self.normalize_word(word) in self.words_index
@@ -102,23 +98,6 @@ class NotesDatabase:
                 (self.normalize_word(word),),
             ).fetchone()
         return row["note_id"] if row else None
-
-    def get_redundant(self, words_list):
-        """
-        Return all words that appear on words_list and in db
-        """
-        return [word for word in words_list if self.is_in_db(word)]
-
-    def __add_words(self, words):
-        """
-        Function that adds words to db. Words is list of tuples (note_id,word),it is
-        """
-
-        for note_id, word in words:
-            if self.add_word(note_id, word):
-                print(f"Dodano '{word}' do bazy.")
-            else:
-                print(f"'{word}' już istnieje w bazie.")
 
     def add_word(self, note_id: int, en_word: str) -> bool:
         """
@@ -149,49 +128,7 @@ class NotesDatabase:
         self.db.append({"note_id": note_id, "en_word": en_word})
         return True
 
-    def __get_all_notes_content(self):
-        decks_names = self.anki_api.get_subdecks()
-        all_notes_ids = [
-            note_id
-            for deck_name in decks_names
-            for note_id in self.anki_api.notes_ids_from_deck(deck_name)
-        ]
-        all_notes_content = self.anki_api.harness_cards_content(all_notes_ids)
-        return all_notes_content
-
-    def db_inspection(self):
-        """
-        Function inspects for errors in database local and in anki app, show all differences between them like:
-        - word appears in local db but not in anki
-        - word appears in anki but not in local db
-        - if there is redundant word in local db
-        """
-
-        all_notes_content = self.__get_all_notes_content()
-        all_notes_words = [
-            note["fields"]["en_word"]["value"] for note in all_notes_content
-        ]
-
-        print("\nWords from local db that are not in anki:")
-        for item in self.db:
-            if item["en_word"] not in all_notes_words:
-                print(item["en_word"])
-
-        print("\nWords from anki db that are not in local db:")
-        for word in all_notes_words:
-            if not self.is_in_db(word):
-                print(word)
-
-        print("\nRedundant words in local db:")
-        seen = set()
-        for entry in self.db:
-            w = entry["en_word"]
-            if w in seen:
-                print(w)
-            else:
-                seen.add(w)
-
-    def delete_word(self, word_to_remove, save_db=True):
+    def delete_word(self, word_to_remove):
         """
         Delete word from local db
         """
@@ -206,36 +143,6 @@ class NotesDatabase:
         self.load_db()
         print(f"Deleted '{word_to_remove}' from local db")
 
-    def delete_multiple_words(self):
-        """
-        Deletes words from local db in a loop.
-        User can enter words one by one; entering 'q' quits the loop.
-        """
-
-        while True:
-            word_to_remove = input(
-                "Podaj słowo do usunięcia (lub 'q' aby zakończyć): "
-            ).strip()
-            if word_to_remove.lower() == "q":
-                break
-            self.delete_word(word_to_remove, save_db=False)
-
-        self.save_db()
-
-    def update_local_db(self):
-        """
-        Adds words to local db from anki that are not in local db.
-        """
-        all_notes_content = self.__get_all_notes_content()
-        all_notes_entries = [
-            (note["noteId"], note["fields"]["en_word"]["value"])
-            for note in all_notes_content
-        ]
-        missing_notes_entries = [
-            (n[0], n[1]) for n in all_notes_entries if not self.is_in_db(n[1])
-        ]
-        self.__add_words(missing_notes_entries)
-
 
 class DatabaseError(Exception):
     """Bazowy wyjątek dla lokalnej bazy słówek."""
@@ -243,10 +150,6 @@ class DatabaseError(Exception):
 
 class DatabaseLoadError(DatabaseError):
     """Błąd wczytywania bazy"""
-
-
-class DatabasePathError(DatabaseError):
-    """Błąd ścieżki do pliku bazy."""
 
 
 class DatabaseDeleteError(DatabaseError):
