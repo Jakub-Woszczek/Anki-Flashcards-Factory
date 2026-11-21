@@ -3,40 +3,31 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 
-class SessionCreateRequest(BaseModel):
-    words: list[str] = Field(default_factory=list)
-    name: str | None = None
-
-
 class SessionPatchRequest(BaseModel):
     deckName: str | None = None
     modelName: str | None = None
     fieldMapping: dict[str, Any] | None = None
 
 
-class QueueEditRequest(BaseModel):
-    words: list[str]
+class SourceEntryRequest(BaseModel):
+    entryId: str
 
 
-class QueueDiffRequest(BaseModel):
-    words: list[str]
-
-
-class CurrentPatchRequest(BaseModel):
+class CurrentPatchRequest(SourceEntryRequest):
     draft: dict[str, Any]
 
 
-class LookupRequest(BaseModel):
+class LookupRequest(SourceEntryRequest):
     word: str | None = None
 
 
-class CommitRequest(BaseModel):
+class CommitRequest(SourceEntryRequest):
     action: Literal["create", "update"]
     removeTags: list[str] = Field(default_factory=list)
     flag: int | None = None
 
 
-class CustomCardRequest(BaseModel):
+class CustomCardRequest(SourceEntryRequest):
     deckName: str
     modelName: str
     fields: dict[str, str]

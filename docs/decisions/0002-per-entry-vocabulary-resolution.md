@@ -36,8 +36,9 @@ as an assumed requirement; that is not a current project goal.
 - Distinguish the original queued text from the resolved dictionary word.
 - Track enough source association to consume the current entry rather than
   treating a save as permission to remove all matching queued lines.
-- The exact Anki identity policy, headword-selection behavior, and raw-to-resolved
-  source cleanup remain to be specified. No implementation mechanism is chosen here.
+- Exact Anki identity and automatic headword-selection behavior remain open.
+  Raw-to-resolved source bookkeeping was subsequently implemented in Q-001 using
+  current-entry IDs, source fingerprints, and exact-line consumption with receipts.
 - Historical bulk cleanup commits remain historical operations; they do not define
   the desired normal interactive workflow.
 

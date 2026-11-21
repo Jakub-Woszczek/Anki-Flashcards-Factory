@@ -15,18 +15,16 @@ from backend.schemas import (
     GeminiReviewRequest,
     LookupRequest,
     ModelSchemaRequest,
-    QueueDiffRequest,
-    QueueEditRequest,
     ReviewItemCommitRequest,
     ReviewItemExistingNoteRequest,
     ReviewItemLookupRequest,
     ReviewItemPreviewRequest,
     ReviewSnapshotRequest,
-    SessionCreateRequest,
     SessionPatchRequest,
+    SourceEntryRequest,
 )
 from backend.services import FactoryService, ServiceError
-from backend.settings import ROOT_DIR, configured_words_to_add_path
+from backend.settings import ROOT_DIR
 from external_apis.diki_lists import coverage
 
 load_dotenv(ROOT_DIR / ".env")
@@ -96,29 +94,9 @@ def list_sessions():
     return service.list_sessions()
 
 
-@app.post("/backend/sessions")
-def create_session(request: SessionCreateRequest):
-    return service.create_add_session(request.words, "import", request.name)
-
-
-@app.post("/backend/sessions/from-words-to-add")
-def create_words_to_add_session():
-    path = configured_words_to_add_path()
-    if not path.exists():
-        raise ServiceError(f"The source file does not exist: {path.name}", 404)
-    words = path.read_text(encoding="utf-8").splitlines()
-    return service.create_add_session(words, "words_to_add.txt", "words_to_add.txt")
-
-
 @app.get("/backend/sessions/{session_id}")
 def get_session(session_id: str):
     return service.session(session_id)
-
-
-@app.delete("/backend/sessions/{session_id}")
-def delete_session(session_id: str):
-    service.delete_add_session(session_id)
-    return {"id": session_id}
 
 
 @app.patch("/backend/sessions/{session_id}")
@@ -131,29 +109,19 @@ def patch_session(session_id: str, request: SessionPatchRequest):
     )
 
 
-@app.patch("/backend/sessions/{session_id}/queue")
-def patch_queue(session_id: str, request: QueueEditRequest):
-    return service.replace_add_queue(session_id, request.words)
-
-
-@app.post("/backend/sessions/{session_id}/queue/diff")
-def diff_queue(session_id: str, request: QueueDiffRequest):
-    return service.queue_diff(session_id, request.words)
-
-
 @app.post("/backend/sessions/{session_id}/current/lookup")
 def lookup_current(session_id: str, request: LookupRequest):
-    return service.lookup_current(session_id, request.word)
+    return service.lookup_current(session_id, request.word, entry_id=request.entryId)
 
 
 @app.patch("/backend/sessions/{session_id}/current")
 def patch_current(session_id: str, request: CurrentPatchRequest):
-    return service.update_current_draft(session_id, request.draft)
+    return service.update_current_draft(session_id, request.draft, entry_id=request.entryId)
 
 
 @app.post("/backend/sessions/{session_id}/current/preview")
-def preview_current(session_id: str):
-    return service.preview_current(session_id)
+def preview_current(session_id: str, request: SourceEntryRequest):
+    return service.preview_current(session_id, entry_id=request.entryId)
 
 
 @app.get("/backend/sessions/{session_id}/current/existing-note")
@@ -162,29 +130,26 @@ def existing_note(session_id: str):
 
 
 @app.post("/backend/sessions/{session_id}/current/duplicate/suspend")
-def suspend_duplicate_note(session_id: str):
-    return service.suspend_duplicate_note(session_id)
-
-
-@app.delete("/backend/sessions/{session_id}/current/duplicate")
-def delete_duplicate_note(session_id: str):
-    return service.delete_duplicate_note(session_id)
+def suspend_duplicate_note(session_id: str, request: SourceEntryRequest):
+    return service.suspend_duplicate_note(session_id, entry_id=request.entryId)
 
 
 @app.post("/backend/sessions/{session_id}/current/commit")
 def commit_current(session_id: str, request: CommitRequest):
-    return service.commit_current(session_id, request.action, request.removeTags, request.flag)
+    return service.commit_current(
+        session_id, request.action, request.removeTags, request.flag, entry_id=request.entryId
+    )
 
 
-@app.post("/backend/sessions/{session_id}/current/skip")
-def skip_current(session_id: str):
-    return service.skip_current(session_id)
+@app.post("/backend/sessions/{session_id}/current/discard")
+def discard_current(session_id: str, request: SourceEntryRequest):
+    return service.discard_current(session_id, entry_id=request.entryId)
 
 
 @app.post("/backend/sessions/{session_id}/current/custom-card")
 def create_custom_card(session_id: str, request: CustomCardRequest):
     return service.create_custom_card(
-        session_id, request.deckName, request.modelName, request.fields
+        session_id, request.deckName, request.modelName, request.fields, entry_id=request.entryId
     )
 
 

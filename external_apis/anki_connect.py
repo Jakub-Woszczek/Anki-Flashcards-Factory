@@ -87,9 +87,6 @@ class AnkiConnect:
             return None
         return self.invoke("suspend", cards=card_ids)
 
-    def delete_note(self, note_id: int):
-        return self.invoke("deleteNotes", notes=[note_id])
-
     def store_media_file(self, filename: str, content: bytes):
         """Store audio in the media folder of Anki's active profile."""
         return self.invoke(

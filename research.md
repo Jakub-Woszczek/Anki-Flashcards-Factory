@@ -1,5 +1,43 @@
 # Offline Diki research
 
+## Q-001 research — 2026-11-21
+
+The sections below retain historical offline-cache research. Current queue findings:
+
+- `backend/storage.py:62-86` copies incoming words to `session_queue`;
+  `get_session` and `complete_current` subsequently operate on that copy.
+- `backend/app.py:99-110` accepts pasted/uploaded content or snapshots the main file.
+- `backend/services.py:678-719` saves through `WordCompletion` then advances the
+  independent session queue. Skip and keep-existing share that advancement path.
+- `backend/word_completion.py:239-295` archives/removes every normalized match in
+  the main file, even when a save originated in a book or tag/flag review.
+- `backend/word_list.py` already provides cooperating-writer locks, atomic replacement,
+  and CLI append. Reuse those primitives; preserve original bytes when consuming.
+- Browser uploads do not identify an editable original path. The owner retired
+  uploads, pasted queues, queue editing/diffs, and duplicate-note deletion instead.
+- Read-only SQLite/file comparison found one main add queue (394 entries), no import
+  add queues, and 25 queue entries absent from the main file. Owner approved appending
+  those entries in queue order before retiring the snapshot.
+
+```text
+Before: source file -> SQLite word snapshot -> UI -> main-file word matching
+After:  source file <-> current-entry reference -> UI -> exact source consumption
+                         |                         |
+                    settings/draft          save + removal receipts
+```
+
+Only a current-entry fingerprint/reference is needed in SQLite, not another pending
+word list. Mutations need client entry IDs, cross-process serialization, append-aware
+file validation, and durable before/after removal receipts. Ambiguous external edits
+must preserve the file. Offline tests must cover crash boundaries and identical lines.
+
+Implementation review: resolved source paths are confined to the source directory,
+SQL values use parameters, and SHA-256 fingerprints detect content changes. The
+feature needs no credentials or certificate handling. Existing credential/service
+configuration is reused rather than embedded in queue code. Entry identity is
+revalidated after dictionary/audio preparation as well as before file consumption;
+an external edit during lookup cannot attach the old draft to a new source entry.
+
 ## Original flow before offline caching
 
 `backend/services.py:317` calls `DikiApi.get_translations`, then

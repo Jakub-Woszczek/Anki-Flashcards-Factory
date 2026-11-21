@@ -1,6 +1,6 @@
 # Project purpose and scope
 
-Last updated: 2026-11-19.
+Last updated: 2026-11-21.
 
 Status: foundation confirmed by the owner during the handbook walkthrough.
 Detailed feature and integration rules remain under discussion. See the
@@ -139,9 +139,12 @@ app's per-word spelling/entry resolution. The former separate whole-list
 raw/prepared preprocessing path was retired on 2026-11-19; see
 [the retirement record](roadmap.md#deprecated-workflow-whole-list-word-preprocessing-l-001).
 
-The file itself is the authoritative queue. The current duplicated SQLite
-add-queue snapshot is an implementation mismatch to remove in a separate refactor,
-recorded as `Q-001` in [to-do](../to-do). See
+The file itself is the authoritative queue. `Q-001` implemented direct file-backed
+processing and removed the duplicated SQLite pending-word snapshot. The homepage
+opens actual main/book sources; pasted/uploaded queue creation and queue editing
+were retired at the owner's request. **Discard from queue** removes the current
+pending entry without changing Anki, including when an existing note already
+covers the word. See
 [ADR 0004](decisions/0004-file-backed-word-queues.md). Restoring unfinished-word
 drafts is optional convenience: the owner is comfortable reselecting
 translations and may remove that feature later (`Q-002`). It is not a core
@@ -153,16 +156,18 @@ The owner highlights words while reading Kindle ebooks. Periodically, a file
 containing words from one book is imported into this project; Fablehaven is an
 existing example of this book-based source.
 
-Book files are also mutable pending queues and should shrink as words are
-individually resolved. Historically, the owner downloaded a Kindle file manually
-and placed it somewhere in the repository; no fixed folder is established.
+Book files are also mutable pending queues and shrink as words are individually
+resolved. Historically, the owner downloaded a Kindle file manually and placed
+it in the repository. The implemented source picker discovers `.txt` files under
+`words_to_add/`, including the existing Fablehaven file and subdirectories.
 Current input is one word or phrase per line, sometimes with import artifacts,
 such as surrounding quotes in `"flimsy"`. This infrequent workflow may change;
 JSON containing words/phrases was mentioned as a possibility, not a committed
 implementation requirement.
 
-Exact artifact cleanup and source-file association remain open. Do not assume a
-Kindle integration or automatic highlight extraction is implemented or requested.
+Exact artifact cleanup remains open; original-file/current-entry association is
+implemented by Q-001. No Kindle integration or automatic highlight extraction is
+implemented or requested.
 See [vocabulary queue rules](features/vocabulary-queues.md) for lifecycle details,
 concurrency requirements, and current implementation gaps.
 

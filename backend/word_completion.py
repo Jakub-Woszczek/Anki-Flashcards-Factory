@@ -9,7 +9,6 @@ import uuid
 from contextlib import closing, contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 
 from backend.settings import configured_words_to_add_path, database_path
 from backend.word_list import atomic_write, list_lock, normalize_word
@@ -284,12 +283,6 @@ class WordCompletion:
 
     def finish(self, anki, save_id):
         self.verify(anki, save_id)
-        result: dict[str, Any] = {"verified": True, "cleanupPending": False}
-        try:
-            result.update(self.cleanup([save_id]))
-        except (OSError, sqlite3.Error, UnicodeError) as error:
-            result.update(
-                cleanupPending=True,
-                cleanupWarning=f"Note verified; list cleanup is pending: {error}",
-            )
-        return result
+        # Interactive saves have no implicit main-file cleanup. The source workspace
+        # consumes its exact entry separately; stateless review consumes no source.
+        return {"verified": True, "cleanupPending": False}

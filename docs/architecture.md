@@ -1,6 +1,6 @@
 # Architecture and operating constraints
 
-Last updated: 2026-11-19.
+Last updated: 2026-11-21.
 
 Status: owner-confirmed deployment/scope and state-ownership decisions, with a
 source-inspected component map. This is not a claim that every path has been
@@ -66,15 +66,19 @@ retired. Active browser index operations and cached audio upload remain. See the
 
 | State | Intended authority / role | Current implementation and qualification |
 | --- | --- | --- |
-| Pending vocabulary/order | Source word file itself | Main/book files are consuming queues; current SQLite add-queue copies conflict with this direction (`Q-001`) |
+| Pending vocabulary/order | Source word file itself | Main/book `.txt` files are live consuming queues; `Q-001` retired the SQLite word snapshots |
 | Anki notes, cards, decks, learning state | Local Anki | Access through AnkiConnect; local indexes/journals do not replace the collection |
 | Dictionary source | Retained HTML/audio snapshot | Shared local files with metadata; no routine refresh, per ADR 0003 |
 | Stored-field rules | Agreed note contracts | Current parser/auditor covers `en_word` syntax only |
 | Save verification/recovery | Local operation journal | Expected/observed content and original card/deck assignments support read-back/retry |
+| Source consumption/recovery | Exact-entry removal receipt and file backup | `source_resolutions` records before/after fingerprints and completion; current entry IDs reject stale requests |
 | Unfinished-word UI selections | Optional convenience | Current drafts persist; owner accepts redoing selections, and possible removal is `Q-002` |
 | Review traversal | Current browser state | Current temporary snapshot supports revisiting study-marked items; red/orange have the same attention-marker meaning |
 
-`Q-001` removes duplicated word-queue state, not all uses of SQLite. See
+`Q-001` removed duplicated word-queue state, not all uses of SQLite. Source workspace
+metadata stores settings and one entry-bound draft/reference; pending counts and
+the next word are read from the actual file. Homepage upload/paste, queue editing,
+and independent queue creation/deletion were retired. See
 [ADR 0004](decisions/0004-file-backed-word-queues.md) and [queue rules](features/vocabulary-queues.md).
 
 ## Main runtime workflow
@@ -87,8 +91,10 @@ Intended/confirmed direction:
 4. Create a note or deliberately refresh an older note. Refresh preserves existing decks.
 5. Resolve only the current source entry after the appropriate outcome; preserve concurrent capture.
 
-Current source-inspected safeguards include durable save intents, Anki read-back,
-archive-before-source-cleanup, and replay of interrupted operations. The precise
+Current safeguards include source-entry-scoped save intents, Anki read-back,
+archive-before-exact-entry-consumption, and replay of interrupted removals. Save
+verification itself no longer implicitly cleans the main file: a source workspace
+consumes its own entry, while tag/flag review saves consume no file. The precise
 workflow gaps remain visible in the feature/contract pages rather than being
 presented as already implemented architecture.
 
@@ -100,8 +106,8 @@ rare failure with a blocking recovery flow.
 
 ## Known mismatches and open areas
 
-- SQLite add queues are independent snapshots; the desired queue is the source file (`Q-001`).
-- Current source cleanup targets matching saved words in the main file, rather than a general original-entry association for all source files.
+- `Q-001` is implemented: source files own queues; exact original entries are consumed
+  independently of lookup spelling, with append-safe writes and stale-request checks.
 - Initial duplicate lookup precedes Diki resolution, while intended identity follows the dictionary headword.
 - Custom/edited Polish text remains possible; selection-only is a tentative decision.
 - Prefetch discovers text lists, without the intended bounded-buffer-to-existing-note preparation tier.

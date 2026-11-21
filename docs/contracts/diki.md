@@ -1,6 +1,6 @@
 # Diki: content identity and curation contract
 
-Last updated: 2026-11-19.
+Last updated: 2026-11-21.
 
 Specification status: English headword and Polish selection compatibility goals,
 acceptable alternate headwords, human selection, and the missing-entry
@@ -281,9 +281,10 @@ confirmed goals, observed mechanics, and existing-note coverage gap.
   using the submitted word before fetching Diki, and stores `sourceWord` and `word`
   in the draft. This is not yet an explicit dictionary-headword-first identity
   contract throughout the pipeline.
-- The verified-cleanup path matches the saved word against the main list, rather
-  than identifying the original source occurrence. Raw `causes` versus resolved
-  `cause` therefore matters to source completion as well as Anki content.
+- Q-001 now identifies and consumes the original current source occurrence,
+  independently of the selected lookup/saved spelling. Saving `cause` can therefore
+  consume original `causes` without removing another queued `cause`. This fixes
+  source bookkeeping, not the broader headword-first lookup/matching gap above.
 - A generic custom-card path exists, but no reviewed rule guarantees routing
   genuinely missing words to the owner's specific missing deck and note type.
 - Deterministic serialization of current draft values exists, but does not alone

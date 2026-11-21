@@ -1,5 +1,38 @@
 # Approved implementation plan: offline Diki
 
+## Approved Q-001 implementation — 2026-11-21
+
+Owner approved implementation after refining the plan in conversation. Historical
+offline work below remains unchanged.
+
+- [x] Replace `SessionStore` word snapshots with discovered project `.txt` sources;
+  reuse existing main-file target settings, retire migrated snapshot rows, and retain
+  only current-entry references, drafts, settings, and completion history.
+- [x] Add append-aware entry fingerprints, client entry IDs, shared operation/file
+  locks, exact-line removal, backups, and idempotent durable removal receipts.
+- [x] Separate Anki save verification from interactive source cleanup. Include source
+  entry identity in save intents; review saves must not consume word files.
+- [x] Replace generic skip/keep-existing with discard. Remove pasted/uploaded queue
+  creation, queue editing/diff/deletion, and duplicate Anki-note deletion UI/API.
+- [x] Append the 25 approved SQLite-only entries to the main file in snapshot order,
+  rechecking absence; migrate the actual local queue without contacting Anki/Diki.
+- [x] Add meaningful offline regressions for duplicates, changed lookup spelling,
+  books, concurrent appends, stale requests, restart and file-write/SQLite boundaries.
+- [x] Update handbook/ADR/README/backlog and run `python -m tools.check`.
+
+Implementation focus: `backend/storage.py`, `backend/word_list.py`,
+`backend/services.py`, `backend/word_completion.py`, routes/schemas, and frontend
+source/workspace controls. Preserve the owner's existing `TranslationEditor` changes.
+Existing `S-001` confirmation semantics and optional `Q-002` draft removal are separate.
+Recovery: retain existing schema/history and file backups; do not reconstruct source
+files from stale SQLite snapshots. No live collection tests or writes.
+
+Q-001 verification: full check passed on 2026-11-21 (Ruff lint/format, Pyright,
+132 offline tests with 2 opt-in live checks skipped, frontend TypeScript/build).
+Local migration preserved the main target, retired 394 snapshot rows, and exposed
+645 main / 682 Fablehaven entries directly from files. The 25 approved missing
+entries were appended and rechecked before migration; database backup retained.
+
 Approved in conversation, including 20 seconds +/- 5 seconds of independently
 sampled jitter after each completed request. Implementation is authorized.
 

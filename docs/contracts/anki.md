@@ -1,6 +1,6 @@
 # Anki integration and existing collection structure
 
-Last updated: 2026-11-17.
+Last updated: 2026-11-21.
 
 Status: live inventory with owner-confirmed deck history, default note type, image
 candidate semantics, and missing-entry definition. Other behavior is still being clarified.
@@ -107,8 +107,11 @@ not establish that this end-to-end feature is complete. See the
 
 ## Existing-note refresh and follow-up tags
 
-Code inspection shows that normal word processing can display an existing note,
-compare fields, keep it, update it in place, suspend it, or delete it. Updates
+Normal word processing can display an existing note, compare fields, update it
+in place, or suspend it. **Discard from queue** removes the pending entry without
+changing the existing note. The redundant keep-existing action and duplicate-note
+deletion were retired in Q-001 at the owner's request; overwrite uses in-place
+update rather than deleting/recreating learned cards. Updates
 retain the note ID, lock the English field, and block changing its note type in
 that path. These are current capabilities, not yet a complete owner-confirmed
 duplicate/update policy.
@@ -144,6 +147,19 @@ The shared update path applies this rule in both add-word and review workflows.
 This change does not establish a complete policy for every other mutable field,
 tag, or scheduling property. The update remains in place against the existing
 note ID; no live scheduling audit was performed for this correction.
+
+## Source queue completion
+
+Create/update/custom saves first use the existing Anki verification rules, then
+consume only their original current source entry. The saved English spelling can
+differ from that original entry. Other occurrences and other source files remain
+pending until evaluated. Save intents include source-entry identity so separate
+occurrences do not accidentally replay one another's operations.
+
+Discard consumes the current source entry without any Anki mutation; this also
+covers deciding that an existing note is already adequate. Exiting before resolving
+a word leaves it pending. Tag/flag review has no vocabulary-source association and
+its saves do not implicitly clean the main list. See [queue rules](../features/vocabulary-queues.md).
 
 ## Acknowledged creation with failed follow-up confirmation
 

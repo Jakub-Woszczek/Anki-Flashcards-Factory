@@ -1,6 +1,6 @@
 # Refresh existing notes through Diki selection
 
-Last updated: 2026-11-17.
+Last updated: 2026-11-21.
 
 Specification status: gradual-cleanup purpose and original-deck preservation
 confirmed; exact compatibility and other preservation rules are still being refined.
@@ -47,8 +47,10 @@ removing edits/custom additions but has not made that decision; the UI stays as 
 
 ## Current behavior and evidence
 
-- `frontend/src/App.tsx` displays an existing note, compares current/proposed
-  fields, and offers keeping it or updating it in place.
+- `frontend/src/App.tsx` displays an existing note and compares current/proposed
+  fields. **Update and continue** updates it in place; **Discard from queue**
+  consumes an already-covered pending entry while leaving Anki unchanged.
+  Duplicate-note deletion/recreation was retired in Q-001.
 - `backend/services.py` constructs translation HTML from selected draft values
   and writes updates against the existing note ID. The normal update path locks
   the English field and rejects note-type changes.
@@ -56,7 +58,8 @@ removing edits/custom additions but has not made that decision; the UI stays as 
 - Updates preserve each card's pre-update deck, including siblings in different
   decks. The original card/deck mapping is recorded in the save journal and checked
   during read-back and recovery instead of verifying the queue's target deck.
-- The verified-save path reads the resulting fields back before source cleanup.
+- The verified-save path reads resulting fields back before consuming the exact
+  original source entry. Tag/flag review has no pending source to consume.
 
 These are inspected implementation properties, not a completed specification of
 everything an update may alter. In particular, the English-field lock means that

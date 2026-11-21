@@ -107,14 +107,20 @@ Serwer Vite przekazuje zadania `/backend` do backendu na porcie `8000`.
 
 ## Workflow
 
-1. Wklej liste slow lub utworz sesje z `words_to_add/words_to_add.txt`.
+1. Na stronie glownej otworz glowny plik `words_to_add/words_to_add.txt` albo
+   ksiazkowy plik `.txt` z `words_to_add/` (rowniez podfoldery).
 2. Wybierz talie, typ notatki i mapowanie pol Anki.
 3. Dla kazdego slowa wybierz tlumaczenia z Diki, dodaj tagi i sprawdz podglad.
-4. Utworz nowa notatke albo zaktualizuj istniejaca.
+4. Utworz nowa notatke, zaktualizuj istniejaca albo wybierz **Discard from queue**.
 
-Sesje, kolejki i szkice sa zapisywane w lokalnej bazie SQLite, wiec mozna je
-wznowic po zamknieciu aplikacji. Widok review pozwala przejsc przez notatki
-wybrane tagiem lub flaga Anki.
+Plik jest kolejka: kolejnosc i pozostale slowa sa odczytywane bezposrednio z niego.
+SQLite przechowuje ustawienia celu, szkic biezacego wpisu i historie operacji,
+bez drugiej kopii listy slow. Dodawaj slowa przez CLI lub edytuj pliki tekstowe.
+Usunieto wklejanie/upload list, tworzenie/nazywanie kolejek, edytor/diff kolejek
+i ich usuwanie na stronie glownej. **Refresh** odczytuje aktualne pliki/liczniki;
+**Reload source** w widoku slowa ponownie wczytuje zrodlo po zewnetrznej zmianie.
+Dodane przez CLI slowa sa tez widoczne przy przechodzeniu do kolejnych wpisow.
+Widok review pozwala przejsc przez notatki wybrane tagiem lub flaga Anki.
 
 Zmiany w Anki sa synchronizowane z AnkiWeb bezposrednio po pierwszej zmianie,
 a kolejne synchronizacje sa ograniczone do jednej na 10 sekund. Przycisk
@@ -128,16 +134,24 @@ Po zapisie aplikacja odczytuje notatke przez AnkiConnect po zwroconym `noteId`
 i porownuje typ, wyslane pola, wymagane/usuwane tagi oraz talie kart. Nowe notatki
 trafiaja do wybranej talii; aktualizacja zachowuje dotychczasowa talie kazdej karty
 istniejacej notatki i sprawdza ja przy odczycie kontrolnym oraz ponowieniu zapisu.
-Dopiero po zgodnym odczycie usuwa wszystkie wystapienia potwierdzonego slowa
-z `words_to_add/words_to_add.txt`. Dotyczy to tworzenia, aktualizacji i custom
-cards. Zwykle pominiecie slowa nie usuwa go z pliku. Przy zmianie hasla usuwane
-jest tylko faktycznie zapisane haslo, nie pierwotne slowo z kolejki.
+Dopiero po zgodnym odczycie usuwa **jeden biezacy, oryginalny wpis z jego pliku**.
+Dotyczy to tworzenia, aktualizacji i custom cards; wpis z ksiazki znika z pliku
+tej ksiazki. Zapisanie `cause` dla oryginalnego `causes` usuwa ten wpis `causes`,
+bez usuwania innych wystapien lub wariantow. Zapis w review nie zmienia list slow.
+
+**Discard from queue** usuwa biezacy wpis bez zmiany Anki, takze gdy istniejaca
+notatka juz wystarcza. Nie ma osobnego **Skip** ani **Keep existing card**.
+Wyjscie przed rozstrzygnieciem slowa pozostawia je w pliku. Usunieto tez
+**Delete duplicate note**; nadpisywanie odbywa sie przez aktualizacje w miejscu.
 
 Historia pozostaje w lokalnej bazie SQLite: `note_index` zawiera powiazanie
 slowo → notatka, `word_saves` zapis oczekiwanej/odczytanej zawartosci i stan
-operacji, a `word_list_archive` oryginalne usuniete linie. Kopia pliku sprzed
-zmiany trafia do `data/archives/words-to-add-*.txt.bak`. Blokada wspolna z CLI
-chroni przed utrata rownolegle dopisywanych slow.
+operacji, a `source_resolutions` dokladny usuniety wpis, wynik i dane do wznowienia.
+Kopia pliku sprzed zmiany trafia do `data/archives/source-<entry-id>.txt.bak`.
+Blokada wspolna z CLI chroni rownolegle dopisywane slowa. Identyfikator wpisu
+blokuje zadania ze starego widoku; porownanie pliku i trwale potwierdzenie usuniecia
+chronia kolejne identyczne wystapienie przy ponowieniu po awarii. Niejednoznaczna
+zewnetrzna zmiana zachowuje plik i wymaga sprawdzenia zrodla/kopii zapasowej.
 
 Nieudana weryfikacja pozostawia slowo i kolejke. Jesli Anki zapisalo notatke,
 ale odpowiedz/odczyt zawiodly, ponowienie najpierw sprawdza poprzednia operacje,
@@ -153,6 +167,13 @@ python -m tools.clean_words_to_add                 # tylko raport
 python -m tools.clean_words_to_add --apply         # odczyt kontrolny, archiwum, usuniecie
 python -m tools.clean_words_to_add --apply --resume # wznowienie niedokonczonych operacji
 ```
+
+To oddzielna, jawna operacja zbiorcza na glownej liscie. `--resume` wznawia tylko
+jej operacje `already_in_anki`, nie zapisy biezacych zrodel ani review.
+
+Migracja Q-001 (2026-11-21): dopisano na koncu glownego pliku 25 zatwierdzonych slow
+obecnych tylko w starej kolejce SQLite, zachowano ustawienia celu i wycofano kopie
+kolejki. Lokalna kopia bazy: `data/archives/pre-q001-20261121.sqlite3`.
 
 ## Diki offline: HTML i MP3
 

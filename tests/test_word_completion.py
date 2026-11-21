@@ -7,6 +7,7 @@ from unittest import TestCase
 from unittest.mock import Mock, patch
 
 from backend.services import FactoryService, ServiceError
+from backend.storage import SessionStore
 from backend.word_completion import VerificationError, WordCompletion
 from backend.word_list import append_word, atomic_write
 from external_apis.diki_resources import NoAudio
@@ -59,6 +60,14 @@ class MemoryAnki:
         self.last_error = None
         return [copy.deepcopy(self.notes[note_id]) for note_id in ids]
 
+    def find_notes_by_field(self, field, value):
+        self.last_error = None
+        return [
+            note_id
+            for note_id, note in self.notes.items()
+            if note["fields"].get(field, {}).get("value") == value
+        ]
+
     def get_note_cards(self, note_id):
         self.last_error = None
         return copy.deepcopy(
@@ -97,6 +106,7 @@ class TestWordCompletion(TestCase):
         self.service.completions = self.store
         self.service.anki = self.anki
         self.service.notes = Mock()
+        self.service.notes.get_note_id.return_value = None
         self.service.diki = Mock(last_error="Audio unavailable")
         self.service.diki.fetch_audio.side_effect = NoAudio("Audio unavailable")
         self.target = {
@@ -110,7 +120,9 @@ class TestWordCompletion(TestCase):
         }
 
     def commit(self, action="create", note_id=None):
-        return self.service._perform_commit(
+        # These legacy bulk-cleanup checks deliberately invoke cleanup explicitly.
+        # Interactive source completion is covered separately below.
+        result = self.service._perform_commit(
             self.target,
             {"en_word": "take", "pl_translation": "brać", "audio_en": "[sound:take.mp3]"},
             ["test"],
@@ -120,6 +132,34 @@ class TestWordCompletion(TestCase):
             "take",
             None,
             None,
+        )
+        try:
+            result.update(self.store.cleanup([result["saveId"]]))
+        except OSError as error:
+            result.update(cleanupPending=True, cleanupWarning=str(error))
+        return result
+
+    def source_session(self):
+        self.service.sessions = SessionStore(self.store.db_path, self.root)
+        session_id = next(
+            source["id"]
+            for source in self.service.sessions.list_sessions()
+            if source["source"] == "words.txt"
+        )
+        session = self.service.sessions.update_session(
+            session_id,
+            deck_name=self.target["deckName"],
+            model_name=self.target["modelName"],
+            field_mapping=self.target["fieldMapping"],
+        )
+        return self.service.sessions.replace_current_draft(
+            session_id,
+            {
+                "entryId": session["current"]["id"],
+                "word": "take",
+                "groups": [[{"value": "brać", "selected": True}]],
+                "tags": [],
+            },
         )
 
     def test_read_back_archives_exact_lines_and_preserves_remaining_bytes(self):
@@ -324,48 +364,183 @@ class TestWordCompletion(TestCase):
         )
         self.assertTrue(result["verified"])
         self.assertEqual(self.anki.decks[123], "Old deck")
-
-    def test_skip_never_removes_from_source(self):
-        self.service.sessions = Mock()
-        self.service.skip_current("session")
         self.assertEqual(self.words.read_bytes(), self.original)
 
+    def test_discard_consumes_one_entry_without_calling_anki(self):
+        session = self.source_session()
+        with patch.object(
+            self.anki, "invoke", side_effect=AssertionError("Anki must not be contacted")
+        ):
+            self.service.discard_current(session["id"], entry_id=session["current"]["id"])
+        self.assertEqual(self.words.read_bytes(), b"\r\nkeep  this\r\n take \r\nlast")
+
     def test_custom_card_is_read_back_before_removing_word(self):
-        self.service.session = lambda _: {"mode": "add", "current": {"word": "take"}, "draft": {}}
-        self.service.sessions = Mock()
-        result = self.service.create_custom_card("session", "English", "Basic", {"en_word": "take"})
+        session = self.source_session()
+        result = self.service.create_custom_card(
+            session["id"], "English", "Basic", {"en_word": "take"}
+        )
         self.assertTrue(result["verified"])
-        self.assertEqual(result["removedLines"], 2)
-        self.service.sessions.complete_current.assert_called_once_with("session")
+        self.assertEqual(result["removedLines"], 1)
+        self.assertEqual(self.words.read_bytes(), b"\r\nkeep  this\r\n take \r\nlast")
 
     def test_failed_custom_verification_does_not_advance_queue(self):
-        self.service.session = lambda _: {"mode": "add", "current": {"word": "take"}, "draft": {}}
-        self.service.sessions = Mock()
+        session = self.source_session()
         self.anki.bad_read = True
         with self.assertRaises(ServiceError):
-            self.service.create_custom_card("session", "English", "Basic", {"en_word": "take"})
-        self.service.sessions.complete_current.assert_not_called()
+            self.service.create_custom_card(session["id"], "English", "Basic", {"en_word": "take"})
+        self.assertEqual(self.service.session(session["id"])["completedCount"], 0)
         self.assertEqual(self.words.read_bytes(), self.original)
 
     def test_cleanup_pending_keeps_session_item(self):
-        self.service.sessions = Mock()
-        session = {
-            **self.target,
-            "mode": "add",
-            "current": {"word": "take"},
-            "draft": {
-                "word": "take",
-                "groups": [[{"value": "brać", "selected": True}]],
-                "tags": [],
-            },
-        }
-        self.service.session = lambda _: session
-        self.service.notes.get_note_id.return_value = None
-        with patch.object(self.store, "cleanup", side_effect=OSError("disk busy")):
-            result = self.service.commit_current("session", "create", [], None)
+        session = self.source_session()
+        with patch.object(
+            self.service.sessions, "complete_current", side_effect=OSError("disk busy")
+        ):
+            result = self.service.commit_current(session["id"], "create", [], None)
         self.assertTrue(result["cleanupPending"])
-        self.assertIs(result["session"], session)
-        self.service.sessions.complete_current.assert_not_called()
+        self.assertEqual(result["session"]["current"]["id"], session["current"]["id"])
+        result = self.service.commit_current(session["id"], "create", [], None)
+        self.assertFalse(result["cleanupPending"])
+        self.assertEqual(self.anki.add_calls, 1)
+        self.assertEqual(self.words.read_bytes(), b"\r\nkeep  this\r\n take \r\nlast")
+
+    def test_source_save_consumes_original_form_and_preserves_other_occurrences(self):
+        self.words.write_bytes(b"causes\ncause\ncauses\n")
+        session = self.source_session()
+        self.service.diki.lookup.return_value = ([["przyczyna"]], [])
+        lookup = self.service.lookup_current(
+            session["id"], "cause", entry_id=session["current"]["id"]
+        )
+        self.assertEqual(lookup["sourceWord"], "causes")
+        draft = self.service.session(session["id"])["draft"]
+        draft["groups"][0][0]["selected"] = True
+        self.service.update_current_draft(session["id"], draft, entry_id=session["current"]["id"])
+        result = self.service.commit_current(
+            session["id"], "create", [], None, entry_id=session["current"]["id"]
+        )
+        self.assertTrue(result["verified"])
+        self.assertEqual(self.anki.notes[123]["fields"]["en_word"]["value"], "cause")
+        self.assertEqual(self.words.read_bytes(), b"cause\ncauses\n")
+
+    def test_source_edit_during_lookup_does_not_attach_draft_to_new_entry(self):
+        session = self.source_session()
+
+        def lookup(_word):
+            self.words.write_bytes(b"replacement\nlast\n")
+            return [["brać"]], []
+
+        self.service.diki.lookup.side_effect = lookup
+        with self.assertRaises(ServiceError) as error:
+            self.service.lookup_current(session["id"], entry_id=session["current"]["id"])
+        self.assertEqual(error.exception.status_code, 409)
+        current = self.service.session(session["id"])
+        self.assertEqual(current["current"]["word"], "replacement")
+        self.assertEqual(current["draft"], {})
+        self.assertEqual(self.anki.add_calls, 0)
+
+    def test_source_edit_during_audio_preparation_prevents_note_creation(self):
+        session = self.source_session()
+
+        def audio(_word):
+            self.words.write_bytes(b"replacement\nlast\n")
+            raise NoAudio("No audio")
+
+        self.service.diki.fetch_audio.side_effect = audio
+        with self.assertRaises(ServiceError):
+            self.service.commit_current(
+                session["id"], "create", [], None, entry_id=session["current"]["id"]
+            )
+        self.assertEqual(self.anki.add_calls, 0)
+        self.assertEqual(self.words.read_bytes(), b"replacement\nlast\n")
+
+    def test_book_save_does_not_clean_matching_words_from_main_source(self):
+        session = self.source_session()
+        main = self.root / "words_to_add.txt"
+        main.write_bytes(b"take\nother\n")
+        self.service.commit_current(
+            session["id"], "create", [], None, entry_id=session["current"]["id"]
+        )
+        self.assertEqual(main.read_bytes(), b"take\nother\n")
+        self.assertEqual(self.words.read_bytes(), b"\r\nkeep  this\r\n take \r\nlast")
+
+    def test_stale_save_request_fails_before_any_anki_write(self):
+        session = self.source_session()
+        entry_id = session["current"]["id"]
+        self.service.discard_current(session["id"], entry_id=entry_id)
+        with self.assertRaises(ServiceError) as error:
+            self.service.commit_current(session["id"], "create", [], None, entry_id=entry_id)
+        self.assertEqual(error.exception.status_code, 409)
+        self.assertEqual(self.anki.add_calls, 0)
+        self.assertEqual(self.words.read_bytes(), b"\r\nkeep  this\r\n take \r\nlast")
+
+    def test_changed_source_before_save_retains_file_and_never_writes_anki(self):
+        session = self.source_session()
+        self.words.write_bytes(b"different\nword\n")
+        with self.assertRaises(ServiceError):
+            self.service.commit_current(
+                session["id"], "create", [], None, entry_id=session["current"]["id"]
+            )
+        self.assertEqual(self.anki.add_calls, 0)
+        self.assertEqual(self.words.read_bytes(), b"different\nword\n")
+
+    def test_source_readback_failure_keeps_entry_and_retry_reuses_note(self):
+        session = self.source_session()
+        self.anki.bad_read = True
+        with self.assertRaises(ServiceError):
+            self.service.commit_current(
+                session["id"], "create", [], None, entry_id=session["current"]["id"]
+            )
+        self.assertEqual(self.words.read_bytes(), self.original)
+        self.anki.bad_read = False
+        result = self.service.commit_current(
+            session["id"], "create", [], None, entry_id=session["current"]["id"]
+        )
+        self.assertTrue(result["resumed"])
+        self.assertEqual(self.anki.add_calls, 1)
+        self.assertEqual(self.words.read_bytes(), b"\r\nkeep  this\r\n take \r\nlast")
+
+    def test_separate_source_entries_do_not_replay_each_others_save_intents(self):
+        self.words.write_bytes(b"take\ntake\n")
+        session = self.source_session()
+        self.service.commit_current(session["id"], "create", [], None)
+        next_session = self.service.session(session["id"])
+        self.service.sessions.replace_current_draft(
+            session["id"],
+            {
+                **session["draft"],
+                "entryId": next_session["current"]["id"],
+                "existingNoteId": 123,
+            },
+        )
+        self.service.commit_current(session["id"], "update", [], None)
+        self.assertEqual(self.anki.add_calls, 1)
+        self.assertEqual(self.words.read_bytes(), b"")
+        with self.store.connect() as db:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM word_saves").fetchone()[0], 2)
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM source_resolutions").fetchone()[0], 2)
+
+    def test_source_cleanup_failure_after_replace_does_not_resave_on_restart(self):
+        session = self.source_session()
+        with patch.object(self.service.sessions, "_finalize", side_effect=OSError("crash")):
+            result = self.service.commit_current(session["id"], "create", [], None)
+        self.assertTrue(result["cleanupPending"])
+        self.service.sessions = SessionStore(self.store.db_path, self.root)
+        with self.assertRaises(ServiceError):
+            self.service.commit_current(
+                session["id"], "create", [], None, entry_id=session["current"]["id"]
+            )
+        self.assertEqual(self.anki.add_calls, 1)
+        self.assertEqual(self.words.read_bytes(), b"\r\nkeep  this\r\n take \r\nlast")
+
+    def test_explicit_legacy_resume_does_not_bulk_clean_interactive_verified_saves(self):
+        session = self.source_session()
+        with patch.object(
+            self.service.sessions, "complete_current", side_effect=OSError("disk busy")
+        ):
+            self.service.commit_current(session["id"], "create", [], None)
+        result = clean(self.anki, self.store, resume=True)
+        self.assertEqual(result["verifiedWords"], 0)
+        self.assertEqual(self.words.read_bytes(), self.original)
 
     def test_legacy_cleanup_confirms_notes_and_archives_duplicates(self):
         self.anki.add_note("English", "Basic", {"en_word": "take"}, [])

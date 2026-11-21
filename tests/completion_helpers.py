@@ -2,6 +2,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from backend.storage import SessionStore
 from backend.word_completion import WordCompletion
 
 
@@ -12,6 +13,16 @@ def install_completion(test, service):
     words = root / "words.txt"
     words.write_text("streamline\ntake\n", encoding="utf-8")
     service.completions = WordCompletion(root / "test.sqlite3", words)
+
+
+def install_source(service):
+    service.sessions = SessionStore(
+        service.completions.db_path, service.completions.words_path.parent
+    )
+    source = next(
+        source for source in service.sessions.list_sessions() if source["source"] == "words.txt"
+    )
+    return service.sessions.get_session(source["id"])
 
 
 class ReadBackAnki:

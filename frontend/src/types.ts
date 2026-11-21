@@ -6,6 +6,7 @@ export type Translation = {
 }
 
 export type Draft = {
+  entryId?: string
   sourceWord?: string
   word?: string
   groups?: Translation[][]
@@ -41,32 +42,11 @@ export type DeckContext = {
 }
 
 export type QueueItem = {
-  id: number
+  id: number | string
   position: number
   word?: string | null
   noteId?: number | null
   cardId?: number | null
-}
-
-export type QueueDiffLine = {
-  kind: 'context' | 'add' | 'remove' | 'change'
-  saved: string | null
-  proposed: string | null
-}
-
-export type QueueDiffHunk = {
-  id: string
-  savedStart: number
-  savedEnd: number
-  proposedStart: number
-  proposedEnd: number
-  lines: QueueDiffLine[]
-}
-
-export type QueueDiff = {
-  savedWords: string[]
-  proposedWords: string[]
-  hunks: QueueDiffHunk[]
 }
 
 export type Session = {
@@ -84,13 +64,12 @@ export type Session = {
   updatedAt: string
   remainingCount: number
   current: QueueItem | null
-  queue: QueueItem[]
 }
 
 export type SessionSummary = Pick<
   Session,
   'id' | 'mode' | 'name' | 'source' | 'deckName' | 'modelName' | 'completedCount' | 'remainingCount' | 'updatedAt'
->
+> & { sourceError?: string | null }
 
 export type Status = {
   ankiAvailable: boolean
@@ -102,6 +81,8 @@ export type Status = {
 }
 
 export type LookupResult = {
+  entryId?: string
+  sourceWord?: string
   word: string
   exactMatch: boolean
   groups: Translation[][]

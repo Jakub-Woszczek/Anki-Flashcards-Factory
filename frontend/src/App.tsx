@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { ApiError, api } from './api'
 import { OfflineDownloads } from './OfflineDownloads'
 import type {
@@ -11,8 +11,6 @@ import type {
   LookupResult,
   ModelSchema,
   Preview,
-  QueueDiff,
-  QueueDiffHunk,
   ReviewFilter,
   ReviewItem,
   ReviewSnapshot,
@@ -166,114 +164,6 @@ function MarkdownAnswer({ value }: { value: string }) {
   return <>{blocks}</>
 }
 
-function QueueEditor({
-  sessionId,
-  onClose,
-  onSaved,
-}: {
-  sessionId: string
-  onClose: () => void
-  onSaved: (session: Session) => void
-}) {
-  const [name, setName] = useState('')
-  const [originalWords, setOriginalWords] = useState<string[]>([])
-  const [text, setText] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [diff, setDiff] = useState<QueueDiff | null>(null)
-  const [diffLoading, setDiffLoading] = useState(false)
-  const diffRequest = useRef(0)
-
-  useEffect(() => {
-    void loadQueue()
-  }, [sessionId])
-
-  async function loadQueue() {
-    setLoading(true)
-    setError(null)
-    try {
-      const session = await api.get<Session>(`/backend/sessions/${sessionId}`)
-      if (session.mode !== 'add') throw new Error('Only add-word queues can be edited.')
-      const words = session.queue.map((item) => item.word?.trim()).filter((word): word is string => Boolean(word))
-      setName(session.name)
-      setOriginalWords(words)
-      setText(words.join('\n'))
-    } catch (requestError) {
-      setError(errorMessage(requestError))
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const proposedWords = text.split(/\r?\n/).map((word) => word.trim()).filter(Boolean)
-  const changed = originalWords.length !== proposedWords.length || originalWords.some((word, index) => word !== proposedWords[index])
-
-  useEffect(() => {
-    if (loading) return
-    const timeout = window.setTimeout(() => void loadDiff(proposedWords), 180)
-    return () => window.clearTimeout(timeout)
-  }, [text, loading, sessionId])
-
-  async function loadDiff(words: string[]) {
-    const requestId = ++diffRequest.current
-    setDiffLoading(true)
-    try {
-      const nextDiff = await api.post<QueueDiff>(`/backend/sessions/${sessionId}/queue/diff`, { words })
-      if (requestId === diffRequest.current) setDiff(nextDiff)
-    } catch (requestError) {
-      if (requestId === diffRequest.current) setError(errorMessage(requestError))
-    } finally {
-      if (requestId === diffRequest.current) setDiffLoading(false)
-    }
-  }
-
-  function revertAll() {
-    updateText(originalWords.join('\n'))
-  }
-
-  function revertHunk(hunk: QueueDiffHunk) {
-    const nextWords = [
-      ...proposedWords.slice(0, hunk.proposedStart),
-      ...originalWords.slice(hunk.savedStart, hunk.savedEnd),
-      ...proposedWords.slice(hunk.proposedEnd),
-    ]
-    updateText(nextWords.join('\n'))
-  }
-
-  function updateText(nextText: string) {
-    // Prevent an older comparison response from being shown for a newer draft.
-    diffRequest.current += 1
-    setDiff(null)
-    setText(nextText)
-  }
-
-  async function saveQueue() {
-    setSaving(true)
-    setError(null)
-    try {
-      const session = await api.patch<Session>(`/backend/sessions/${sessionId}/queue`, { words: proposedWords })
-      onSaved(session)
-    } catch (requestError) {
-      setError(errorMessage(requestError))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return <div className="queue-editor-backdrop" role="dialog" aria-modal="true" aria-label={`Edit ${name || 'queue'}`}>
-    <section className="queue-editor">
-      <div className="panel__heading"><div><p className="eyebrow">EDIT ADD QUEUE</p><h2>{name || 'Loading queue...'}</h2><p>Edit one word or phrase per line. The saved queue and your draft are compared as separate change hunks.</p></div><button className="tiny-button" type="button" onClick={onClose} disabled={saving}>Close</button></div>
-      {error ? <div className="inline-error">{error}</div> : null}
-      {loading ? <LoadingMark label="Reading queue" /> : <><div className="queue-editor__summary"><span>{originalWords.length} saved</span><span>{proposedWords.length} proposed</span>{proposedWords.length === 0 ? <b>This will empty the queue.</b> : null}</div><div className="queue-editor__grid"><label className="queue-editor__input"><span>EDITED QUEUE</span><textarea spellCheck={false} value={text} onChange={(event) => updateText(event.target.value)} /></label><section className="queue-diff" aria-label="Queue changes"><div className="queue-diff__heading"><span>SAVED / DRAFT DIFF</span><b>{diffLoading ? 'Comparing...' : changed ? `${diff?.hunks.length ?? 0} change ${diff?.hunks.length === 1 ? 'hunk' : 'hunks'}` : 'No changes'}</b></div><div className="queue-diff__body">{changed && diff?.hunks.length ? <><div className="queue-diff__columns"><span>Saved queue</span><span>Edited draft</span></div>{diff.hunks.map((hunk) => <QueueDiffHunkView key={hunk.id} hunk={hunk} onRevert={() => revertHunk(hunk)} />)}</> : <p className="queue-diff__empty">{diffLoading ? 'Comparing the draft with the saved queue...' : 'No queue changes to review.'}</p>}</div></section></div><div className="queue-editor__actions"><button className="button button--secondary" type="button" onClick={onClose} disabled={saving}>Cancel</button><button className="button button--ghost" type="button" onClick={revertAll} disabled={saving || !changed}>Revert all changes</button><button className="button button--primary" type="button" onClick={() => void saveQueue()} disabled={saving || !changed}>{saving ? 'Saving queue...' : proposedWords.length ? 'Save queue changes' : 'Empty this queue'}</button></div></>}
-    </section>
-  </div>
-}
-
-function QueueDiffHunkView({ hunk, onRevert }: { hunk: QueueDiffHunk; onRevert: () => void }) {
-  return <section className="queue-diff__hunk">{hunk.lines.map((line, index) => <div className={`queue-diff__row queue-diff__row--${line.kind}`} key={`${line.kind}-${index}-${line.saved}-${line.proposed}`}><code>{line.saved ?? ''}</code><code>{line.proposed ?? ''}</code></div>)}<button className="queue-diff__revert" type="button" onClick={onRevert}>Revert this change</button></section>
-}
-
 function StatusPill({ active, label }: { active: boolean; label: string }) {
   return <span className={`status-pill ${active ? 'status-pill--ready' : 'status-pill--quiet'}`}>{active ? 'Online' : 'Offline'}: {label}</span>
 }
@@ -291,13 +181,8 @@ export default function App() {
   const [decks, setDecks] = useState<string[]>([])
   const [inventory, setInventory] = useState<Inventory>({ tags: [], flags: [] })
   const [reviewDeck, setReviewDeck] = useState('')
-  const [importText, setImportText] = useState('')
-  const [importName, setImportName] = useState('')
   const [homeLoading, setHomeLoading] = useState(true)
-  const [creating, setCreating] = useState(false)
   const [reviewLoading, setReviewLoading] = useState(false)
-  const [editingQueueId, setEditingQueueId] = useState<string | null>(null)
-  const [deletingQueueId, setDeletingQueueId] = useState<string | null>(null)
   const [message, setMessage] = useState<Message>(null)
   const [inventoryError, setInventoryError] = useState<string | null>(null)
   const [stoppingApp, setStoppingApp] = useState(false)
@@ -355,49 +240,6 @@ export default function App() {
     }
   }
 
-  async function createImportSession() {
-    const words = importText.split(/\r?\n/).map((word) => word.trim()).filter(Boolean)
-    if (!words.length) {
-      setMessage({ tone: 'error', text: 'Paste at least one word before creating a session.' })
-      return
-    }
-    setCreating(true)
-    try {
-      const session = await api.post<Session>('/backend/sessions', { words, name: importName.trim() || undefined })
-      setActiveSessionId(session.id)
-    } catch (error) {
-      setMessage({ tone: 'error', text: errorMessage(error) })
-    } finally {
-      setCreating(false)
-    }
-  }
-
-  async function createWordsToAddSession() {
-    setCreating(true)
-    try {
-      const session = await api.post<Session>('/backend/sessions/from-words-to-add')
-      setActiveSessionId(session.id)
-    } catch (error) {
-      setMessage({ tone: 'error', text: errorMessage(error) })
-    } finally {
-      setCreating(false)
-    }
-  }
-
-  async function deleteQueue(session: SessionSummary) {
-    if (!window.confirm(`Delete the queue "${session.name}"? Its remaining words and saved draft will be permanently removed.`)) return
-    setDeletingQueueId(session.id)
-    try {
-      await api.delete<{ id: string }>(`/backend/sessions/${session.id}`)
-      setSessions((current) => current.filter((item) => item.id !== session.id))
-      setMessage({ tone: 'success', text: `Deleted queue "${session.name}".` })
-    } catch (error) {
-      setMessage({ tone: 'error', text: errorMessage(error) })
-    } finally {
-      setDeletingQueueId(null)
-    }
-  }
-
   async function stopApp() {
     if (!window.confirm('Sync pending Anki changes and stop the local app server?')) return
     setStoppingApp(true)
@@ -433,17 +275,6 @@ export default function App() {
     }
   }
 
-  async function readImportFile(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.currentTarget.files?.[0]
-    if (!file) return
-    try {
-      setImportText(await file.text())
-      if (!importName.trim()) setImportName(file.name.replace(/\.[^.]+$/, ''))
-    } catch {
-      setMessage({ tone: 'error', text: 'The selected file could not be read.' })
-    }
-  }
-
   if (activeSessionId) {
     return (
       <Workspace
@@ -470,8 +301,7 @@ export default function App() {
     )
   }
 
-  // Review-by-tag/flag is stateless and never persisted, so only add queues show up here.
-  const openSessions = sessions.filter((session) => session.mode === 'add' && session.remainingCount > 0)
+  const sources = sessions.filter((session) => session.mode === 'add')
   return (
     <main className="app-shell">
       <header className="topbar topbar--home">
@@ -492,41 +322,24 @@ export default function App() {
       <Notice message={message} />
       {status && !status.ankiAvailable ? <div className="inline-error service-notice">{status.ankiError ?? 'Open Anki with AnkiConnect enabled, then refresh this page.'}</div> : null}
 
-      <section className="home-grid" aria-label="Start or resume work">
+      <section className="source-home" aria-label="Vocabulary source files">
         <article className="panel panel--continue">
           <div className="panel__heading">
-            <div><p className="eyebrow">01 / RESUME</p><h2>Continue a session</h2></div>
-            <button className="icon-button" type="button" title="Refresh sessions" onClick={() => void refreshHome()} disabled={homeLoading}>Refresh</button>
+            <div><p className="eyebrow">01 / WORD FILES</p><h2>Choose a vocabulary source</h2><p>The file is the queue. Maintain words in the text files or capture them through the CLI.</p></div>
+            <button className="icon-button" type="button" title="Refresh source files" onClick={() => void refreshHome()} disabled={homeLoading}>Refresh</button>
           </div>
-          {homeLoading ? <LoadingMark label="Reading local sessions" /> : openSessions.length ? (
+          {homeLoading ? <LoadingMark label="Reading source files" /> : sources.length ? (
             <div className="session-list">
-              {openSessions.map((session) => (
+              {sources.map((session) => (
                 <div className="session-row session-row--add" key={session.id}>
-                  <button className="session-row__main" type="button" onClick={() => setActiveSessionId(session.id)}><strong>{session.name}</strong><small>Queue{session.deckName ? ` / ${session.deckName}` : ''}</small></button>
+                  <button className="session-row__main" type="button" disabled={Boolean(session.sourceError) || !session.remainingCount} onClick={() => setActiveSessionId(session.id)}><strong>{session.name}</strong><small>{session.sourceError ?? `Live file${session.deckName ? ` / ${session.deckName}` : ''}`}</small></button>
                   <span className="session-row__meta"><b>{session.remainingCount}</b><small>left</small></span>
                   <span className="session-row__date">{formatDate(session.updatedAt)}</span>
-                  <button className="tiny-button session-row__edit" type="button" onClick={() => setEditingQueueId(session.id)} disabled={deletingQueueId === session.id}>Edit</button>
-                  <button className="session-row__delete" type="button" aria-label={`Delete queue ${session.name}`} title="Delete queue" onClick={() => void deleteQueue(session)} disabled={deletingQueueId === session.id}>
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" /></svg>
-                  </button>
-                  <button className="session-row__arrow" type="button" onClick={() => setActiveSessionId(session.id)}>Open</button>
+                  <button className="session-row__arrow" type="button" disabled={Boolean(session.sourceError) || !session.remainingCount} onClick={() => setActiveSessionId(session.id)}>{session.remainingCount ? 'Open' : 'Empty'}</button>
                 </div>
               ))}
             </div>
-          ) : <EmptyState title="No active queues" text="Import a list or use words_to_add.txt to create a durable queue. Tag and flag review below runs live from Anki and is never saved." />}
-        </article>
-
-        <article className="panel panel--import">
-          <div className="panel__heading"><div><p className="eyebrow">02 / ADD</p><h2>Import words</h2></div><span className="counter-badge">{importText.split(/\r?\n/).filter((word) => word.trim()).length} lines</span></div>
-          <label className="field-label" htmlFor="session-name">Queue name <span>optional</span></label>
-          <input id="session-name" className="text-input" value={importName} onChange={(event) => setImportName(event.target.value)} placeholder="September vocabulary" />
-          <label className="field-label" htmlFor="word-import">One word or phrase per line</label>
-          <textarea id="word-import" className="import-area" value={importText} onChange={(event) => setImportText(event.target.value)} placeholder={'broad walk\neyepatch\nwhatever floats one\'s boat'} />
-          <div className="import-actions">
-            <label className="button button--secondary file-button"><input type="file" accept=".txt,text/plain" onChange={readImportFile} />Load text file</label>
-            <button className="button button--primary" type="button" onClick={() => void createImportSession()} disabled={creating}>{creating ? 'Creating...' : 'Create queue'}</button>
-          </div>
-          <div className="source-strip"><span>OR</span><div><strong>Use words_to_add.txt</strong><small>Snapshot the append-only project file in its existing order.</small></div><button className="text-button" type="button" onClick={() => void createWordsToAddSession()} disabled={creating}>Run file</button></div>
+          ) : <EmptyState title="No source files found" text="Keep the main vocabulary and book .txt files in words_to_add/. Refresh after adding a file." />}
         </article>
       </section>
 
@@ -534,7 +347,7 @@ export default function App() {
 
       <section className="panel review-panel">
         <div className="panel__heading review-panel__heading">
-          <div><p className="eyebrow">03 / REPAIR</p><h2>Review tags and flags</h2><p>A live, one-off snapshot of current Anki metadata &mdash; nothing is saved here. Tags belong to notes; flags belong to individual cards.</p></div>
+          <div><p className="eyebrow">02 / REPAIR</p><h2>Review tags and flags</h2><p>A live, one-off snapshot of current Anki metadata &mdash; nothing is saved here. Tags belong to notes; flags belong to individual cards.</p></div>
           <label className="compact-select">Deck scope<select value={reviewDeck} onChange={(event) => setReviewDeck(event.target.value)}><option value="">All decks</option>{decks.map((deck) => <option key={deck} value={deck}>{deck}</option>)}</select></label>
         </div>
         {inventoryError ? <div className="inline-error">{inventoryError}</div> : null}
@@ -543,15 +356,6 @@ export default function App() {
           <div className="inventory-section"><h3>Card flags</h3>{inventory.flags.length ? <div className="inventory-list">{inventory.flags.map((flag) => <button className={`inventory-item inventory-item--flag flag-${flag.value}`} type="button" disabled={reviewLoading} key={String(flag.value)} onClick={() => void startReview('flag', Number(flag.value))}><span>{FLAG_NAMES[Number(flag.value)] ?? `Flag ${flag.value}`}</span><b>{flag.count}</b></button>)}</div> : <p className="muted">No flagged cards in this scope.</p>}</div>
         </div>
       </section>
-      {editingQueueId ? <QueueEditor
-        sessionId={editingQueueId}
-        onClose={() => setEditingQueueId(null)}
-        onSaved={(saved) => {
-          setSessions((current) => current.map((session) => session.id === saved.id ? saved : session))
-          setMessage({ tone: 'success', text: saved.remainingCount ? `Saved ${saved.remainingCount} queued word${saved.remainingCount === 1 ? '' : 's'}.` : 'The queue is now empty.' })
-          setEditingQueueId(null)
-        }}
-      /> : null}
     </main>
   )
 }
@@ -689,6 +493,7 @@ function DeckTreeBranch({ node, selected, onSelect }: { node: DeckNode; selected
 
 function CustomCardForm({
   sessionId,
+  entryId,
   currentWord,
   initialDeckName,
   initialModelName,
@@ -698,6 +503,7 @@ function CustomCardForm({
   onComplete,
 }: {
   sessionId: string
+  entryId: string
   currentWord: string
   initialDeckName: string
   initialModelName: string
@@ -742,7 +548,7 @@ function CustomCardForm({
     try {
       const result = await api.post<{ action: string; noteId: number; session: Session; syncWarning?: string; cleanupWarning?: string }>(
         `/backend/sessions/${sessionId}/current/custom-card`,
-        { deckName, modelName, fields },
+        { deckName, modelName, fields, entryId },
       )
       await onComplete(result)
     } catch (requestError) {
@@ -796,6 +602,7 @@ function Workspace({ sessionId, review, onExit }: { sessionId?: string; review?:
   const [overrideSchema, setOverrideSchema] = useState<ModelSchema | null>(null)
   const [customCardOpen, setCustomCardOpen] = useState(false)
   const draftTimer = useRef<ReturnType<typeof window.setTimeout> | undefined>(undefined)
+  const sourceEntry = useRef<string | undefined>(undefined)
 
   // Review-by-tag/flag walks an in-memory snapshot instead of a persisted session:
   // this rebuilds the same shape the rest of the workspace already expects.
@@ -817,7 +624,6 @@ function Workspace({ sessionId, review, onExit }: { sessionId?: string; review?:
       updatedAt: '',
       remainingCount: remainingItems.length,
       current: current ? { id: completed, position: completed, word: null, noteId: current.noteId, cardId: current.cardId } : null,
-      queue: remainingItems.map((item, index) => ({ id: completed + index, position: completed + index, word: null, noteId: item.noteId, cardId: item.cardId })),
     }
   }
 
@@ -841,6 +647,7 @@ function Workspace({ sessionId, review, onExit }: { sessionId?: string; review?:
   }, [error])
 
   async function loadWorkspace() {
+    if (draftTimer.current) window.clearTimeout(draftTimer.current)
     setLoading(true)
     setError(null)
     try {
@@ -921,6 +728,8 @@ function Workspace({ sessionId, review, onExit }: { sessionId?: string; review?:
   }
 
   async function hydrateCurrent(nextSession: Session, currentConfig: WorkspaceConfig) {
+    sourceEntry.current = nextSession.mode === 'add' ? String(nextSession.current?.id ?? '') : undefined
+    setDraft(null)
     setPreview(null)
     setExisting(null)
     setLookup(null)
@@ -997,23 +806,25 @@ function Workspace({ sessionId, review, onExit }: { sessionId?: string; review?:
       }
       setDraft(reviewDraft)
       setSuggestionInput(reviewDraft.word ?? '')
-      if (!isReview && !nextSession.draft?.word) await api.patch<Session>(`/backend/sessions/${sessionId}/current`, { draft: reviewDraft })
     } catch (requestError) {
       setError(errorMessage(requestError))
     }
   }
 
   async function lookupCurrent(word?: string) {
+    const entryId = sourceEntry.current
     setError(null)
     setPreview(null)
     try {
       const result = isReview
         ? await api.post<LookupResult>('/backend/review/item/lookup', { word: word ?? draft?.word ?? '', fieldMapping: config.fieldMapping })
-        : await api.post<LookupResult>(`/backend/sessions/${sessionId}/current/lookup`, word ? { word } : {})
+        : await api.post<LookupResult>(`/backend/sessions/${sessionId}/current/lookup`, { word, entryId })
+      if (!isReview && entryId !== sourceEntry.current) return
       setLookup(result)
       setSuggestionInput(result.word)
       const nextDraft: Draft = {
-        sourceWord: result.word,
+        entryId: result.entryId,
+        sourceWord: result.sourceWord ?? result.word,
         word: result.word,
         groups: result.groups,
         tags: session?.mode === 'review' ? draft?.tags ?? existing?.tags ?? [] : [],
@@ -1035,10 +846,12 @@ function Workspace({ sessionId, review, onExit }: { sessionId?: string; review?:
   }
 
   async function loadExistingNote(showFailure: boolean, noteIdOverride?: number | null) {
+    const entryId = sourceEntry.current
     try {
       const note = isReview
         ? await api.post<ExistingNote>('/backend/review/item/existing-note', { noteId: noteIdOverride ?? draft?.existingNoteId ?? session?.current?.noteId })
         : await api.get<ExistingNote>(`/backend/sessions/${sessionId}/current/existing-note`)
+      if (!isReview && entryId !== sourceEntry.current) return null
       setExisting(note)
       return note
     } catch (requestError) {
@@ -1052,7 +865,8 @@ function Workspace({ sessionId, review, onExit }: { sessionId?: string; review?:
       // Nothing to persist for a stateless review item; the draft only lives in local state.
       setSession((current) => current ? { ...current, draft: value } : current)
     } else {
-      const saved = await api.patch<Session>(`/backend/sessions/${sessionId}/current`, { draft: value })
+      const saved = await api.patch<Session>(`/backend/sessions/${sessionId}/current`, { draft: value, entryId: value.entryId })
+      if (value.entryId !== sourceEntry.current) return
       setSession((current) => current ? { ...current, draft: value, updatedAt: saved.updatedAt } : current)
     }
     if (updatePreview) await requestPreview(false)
@@ -1258,6 +1072,7 @@ function Workspace({ sessionId, review, onExit }: { sessionId?: string; review?:
   }
 
   async function requestPreview(showFailure = true) {
+    const entryId = draft?.entryId
     if (!effectiveConfigurationReady()) {
       if (showFailure) setError('Choose a deck, note type, English field, and translation field before previewing.')
       return
@@ -1272,7 +1087,8 @@ function Workspace({ sessionId, review, onExit }: { sessionId?: string; review?:
             modelName: target.modelName,
             fieldMapping: target.fieldMapping,
           })
-        : await api.post<Preview>(`/backend/sessions/${sessionId}/current/preview`)
+        : await api.post<Preview>(`/backend/sessions/${sessionId}/current/preview`, { entryId })
+      if (!isReview && entryId !== sourceEntry.current) return
       setPreview(nextPreview)
       if (existing) await loadExistingNote(false)
     } catch (requestError) {
@@ -1325,7 +1141,7 @@ function Workspace({ sessionId, review, onExit }: { sessionId?: string; review?:
         await persistDraft(draft, false)
         const sessionResult = await api.post<{ action: string; noteId: number; audioDownloaded: boolean; audioError?: string; flagWarning?: string; syncWarning?: string; cleanupWarning?: string; session: Session }>(
           `/backend/sessions/${sessionId}/current/commit`,
-          { action: isDuplicate ? 'update' : 'create', removeTags, flag },
+          { action: isDuplicate ? 'update' : 'create', removeTags, flag, entryId: draft.entryId },
         )
         result = sessionResult
         nextSession = sessionResult.session
@@ -1340,7 +1156,7 @@ function Workspace({ sessionId, review, onExit }: { sessionId?: string; review?:
     }
   }
 
-  async function skipCurrent() {
+  async function discardCurrent() {
     if (!session) return
     setSaving(true)
     setError(null)
@@ -1354,9 +1170,9 @@ function Workspace({ sessionId, review, onExit }: { sessionId?: string; review?:
         setReviewCompleted(completed)
         nextSession = nextReviewSession(remaining, completed)
       } else {
-        nextSession = await api.post<Session>(`/backend/sessions/${sessionId}/current/skip`)
+        nextSession = await api.post<Session>(`/backend/sessions/${sessionId}/current/discard`, { entryId: String(session.current?.id) })
       }
-      setNotice('Skipped the current queue item. The next item is ready when you are.')
+      setNotice(isReview ? 'Moved to the next review item.' : 'Discarded the current entry from its source file. Anki was not changed.')
       setSession(nextSession)
       await hydrateCurrent(nextSession, config)
     } catch (requestError) {
@@ -1374,28 +1190,9 @@ function Workspace({ sessionId, review, onExit }: { sessionId?: string; review?:
       if (draftTimer.current) window.clearTimeout(draftTimer.current)
       const result = await api.post<{ action: string; noteId: number; session: Session; syncWarning?: string }>(
         `/backend/sessions/${sessionId}/current/duplicate/suspend`,
+        { entryId: String(session.current?.id) },
       )
       setNotice(`Suspended duplicate note ${result.noteId}, then continued the queue.${result.syncWarning ? ` Anki sync is pending: ${result.syncWarning}` : ''}`)
-      setSession(result.session)
-      await hydrateCurrent(result.session, config)
-    } catch (requestError) {
-      setError(errorMessage(requestError))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  async function deleteDuplicate() {
-    if (!session || !existing || isReview) return
-    if (!window.confirm(`Delete duplicate Anki note ${existing.noteId} and all of its generated cards? This cannot be undone here.`)) return
-    setSaving(true)
-    setError(null)
-    try {
-      if (draftTimer.current) window.clearTimeout(draftTimer.current)
-      const result = await api.delete<{ action: string; noteId: number; session: Session; syncWarning?: string }>(
-        `/backend/sessions/${sessionId}/current/duplicate`,
-      )
-      setNotice(`Deleted duplicate note ${result.noteId}. Create this word when you are ready.${result.syncWarning ? ` Anki sync is pending: ${result.syncWarning}` : ''}`)
       setSession(result.session)
       await hydrateCurrent(result.session, config)
     } catch (requestError) {
@@ -1444,11 +1241,11 @@ function Workspace({ sessionId, review, onExit }: { sessionId?: string; review?:
   }
 
   if (loading) {
-    return <main className="workspace-shell"><header className="topbar"><div className="brand"><span className="brand__mark">AF</span><span>Anki Flashcards Factory</span></div></header><LoadingMark label="Opening saved session" /></main>
+    return <main className="workspace-shell"><header className="topbar"><div className="brand"><span className="brand__mark">AF</span><span>Anki Flashcards Factory</span></div></header><LoadingMark label={isReview ? 'Opening review' : 'Reading source file'} /></main>
   }
 
   if (!session) {
-    return <main className="workspace-shell"><header className="topbar"><div className="brand"><span className="brand__mark">AF</span><span>Anki Flashcards Factory</span></div><button className="button button--secondary" type="button" onClick={() => void exitWorkspace()}>Exit to home</button></header><div className="workspace-error"><h1>Session unavailable</h1><p>{error ?? 'The saved session could not be loaded.'}</p></div></main>
+    return <main className="workspace-shell"><header className="topbar"><div className="brand"><span className="brand__mark">AF</span><span>Anki Flashcards Factory</span></div><button className="button button--secondary" type="button" onClick={() => void exitWorkspace()}>Exit to home</button></header><div className="workspace-error"><h1>Source unavailable</h1><p>{error ?? 'The source file could not be loaded.'}</p></div></main>
   }
 
   if (session.mode === 'add' && !targetConfigured(config)) {
@@ -1493,13 +1290,14 @@ function Workspace({ sessionId, review, onExit }: { sessionId?: string; review?:
       <header className="topbar workspace-topbar">
         <div className="brand"><span className="brand__mark">AF</span><span>Anki Flashcards Factory</span></div>
         <div className="queue-meter"><span>{session.mode === 'review' ? 'REVIEW QUEUE' : 'ADD QUEUE'}</span><strong>{session.remainingCount} <small>remaining</small></strong></div>
+        {!isReview ? <button className="tiny-button" type="button" disabled={saving || loading} onClick={() => void loadWorkspace()}>Reload source</button> : null}
         <button className="button button--secondary" type="button" onClick={() => void exitWorkspace()}>Exit to home</button>
       </header>
 
       <Notice message={error ? { tone: 'error', text: error } : null} />
 
       {completed ? (
-          <section className="completion-card"><p className="eyebrow">QUEUE COMPLETE</p><h1>Everything in this session is accounted for.</h1><p>The session remains in local history. Start another queue when you are ready.</p>{notice ? <p className="completion-card__notice">{notice}</p> : null}<button className="button button--primary" type="button" onClick={() => void exitWorkspace()}>Return home</button></section>
+          <section className="completion-card"><p className="eyebrow">{isReview ? 'REVIEW COMPLETE' : 'SOURCE EMPTY'}</p><h1>Everything here is accounted for.</h1><p>{isReview ? 'Return home to choose another review.' : 'This source has no pending words. Reload after adding vocabulary, or choose another source.'}</p>{notice ? <p className="completion-card__notice">{notice}</p> : null}<button className="button button--primary" type="button" onClick={() => void exitWorkspace()}>Return home</button></section>
       ) : (
         <>
           <section className="word-banner">
@@ -1507,14 +1305,14 @@ function Workspace({ sessionId, review, onExit }: { sessionId?: string; review?:
             <div className="word-banner__meta"><span>{session.completedCount} completed</span><span>Position {(session.current?.position ?? session.completedCount) + 1}</span><span className={draft?.targetOverride ? 'word-banner__target word-banner__target--override' : 'word-banner__target'}>{draft?.targetOverride ? 'One-card deck' : 'Deck'}: {cardTarget.deckName}</span><span className={draft?.targetOverride ? 'word-banner__target word-banner__target--override' : 'word-banner__target'}>{draft?.targetOverride ? 'One-card note type' : 'Note type'}: {cardTarget.modelName}</span>{isDuplicate ? <b>Duplicate found</b> : <b>New note</b>}</div>
           </section>
 
-          {isDuplicate ? <section className="duplicate-decision"><div><p className="duplicate-alert-label">EXISTING ANKI NOTE DETECTED</p>{existing ? <div className="duplicate-decision__details"><div className="duplicate-decision__current"><span>Current translation</span><div dangerouslySetInnerHTML={{ __html: existing.fields[cardTarget.fieldMapping.translationField ?? ''] || '<i>(empty)</i>' }} /></div><p className="duplicate-decision__tags"><strong>Existing tags:</strong> <span>{existing.tags.length ? existing.tags.join(', ') : 'none'}</span></p></div> : <p>Loading the current Anki card...</p>}</div><div className="duplicate-decision__actions"><button className="button button--secondary" type="button" disabled={saving} onClick={() => void skipCurrent()}>Keep existing card</button><button className="button button--secondary" type="button" disabled={saving || !existing} onClick={() => void suspendDuplicate()}>Suspend duplicate and continue</button><button className="button button--danger" type="button" disabled={saving || !existing} onClick={() => void deleteDuplicate()}>Delete duplicate note</button></div></section> : null}
+          {isDuplicate ? <section className="duplicate-decision"><div><p className="duplicate-alert-label">EXISTING ANKI NOTE DETECTED</p>{existing ? <div className="duplicate-decision__details"><div className="duplicate-decision__current"><span>Current translation</span><div dangerouslySetInnerHTML={{ __html: existing.fields[cardTarget.fieldMapping.translationField ?? ''] || '<i>(empty)</i>' }} /></div><p className="duplicate-decision__tags"><strong>Existing tags:</strong> <span>{existing.tags.length ? existing.tags.join(', ') : 'none'}</span></p></div> : <p>Loading the current Anki card...</p>}</div>{!isReview ? <div className="duplicate-decision__actions"><button className="button button--secondary" type="button" disabled={saving || !existing} onClick={() => void suspendDuplicate()}>Suspend duplicate and continue</button></div> : null}</section> : null}
 
           <section className="ai-assist"><button className="button button--secondary" type="button" disabled={geminiLoading || !draft?.word} onClick={() => void askGemini(useGeminiReview)}>{geminiLoading ? 'Asking AI...' : useGeminiReview ? 'Compare translations using AI' : 'Translate word using AI'}</button>{geminiText ? <div className="ai-assist__answer"><MarkdownAnswer value={geminiText} /></div> : null}</section>
 
           <div className="workspace-grid">
 
             <section className="editor-column">
-              {session.mode === 'add' && lookup && !lookup.exactMatch ? <section className="panel suggestion-panel"><p className="eyebrow">DIKI COULD NOT CONFIRM THIS SPELLING</p><h2>Choose a suggestion or try another spelling</h2><div className="suggestion-edit"><input className="text-input" value={suggestionInput} onChange={(event) => setSuggestionInput(event.target.value)} /><button className="button button--secondary" type="button" onClick={() => void lookupCurrent(suggestionInput)}>Look up</button></div>{lookup.suggestions.length ? <div className="suggestion-list">{lookup.suggestions.map((suggestion) => <button key={suggestion} type="button" onClick={() => void lookupCurrent(suggestion)}>{suggestion}</button>)}</div> : <p className="muted">Diki did not provide alternate spellings. You can skip this item or add a custom translation.</p>}</section> : null}
+              {session.mode === 'add' && lookup && !lookup.exactMatch ? <section className="panel suggestion-panel"><p className="eyebrow">DIKI COULD NOT CONFIRM THIS SPELLING</p><h2>Choose a suggestion or try another spelling</h2><div className="suggestion-edit"><input className="text-input" value={suggestionInput} onChange={(event) => setSuggestionInput(event.target.value)} /><button className="button button--secondary" type="button" onClick={() => void lookupCurrent(suggestionInput)}>Look up</button></div>{lookup.suggestions.length ? <div className="suggestion-list">{lookup.suggestions.map((suggestion) => <button key={suggestion} type="button" onClick={() => void lookupCurrent(suggestion)}>{suggestion}</button>)}</div> : <p className="muted">Diki did not provide alternate spellings. You can discard this entry or create a custom card.</p>}</section> : null}
 
               {cardReady ? <><section className="panel translations-panel">
                 <div className="panel__heading"><div><h2>Meanings from Diki</h2></div><div className="translation-heading-actions">{session.mode === 'review' ? <button className="tiny-button" type="button" disabled={!draft?.word} onClick={() => void lookupCurrent(draft?.word)}>Refresh Diki</button> : null}<span className="counter-badge">{selectedGroups(draft).flat().length} selected</span></div></div>
@@ -1549,12 +1347,13 @@ function Workspace({ sessionId, review, onExit }: { sessionId?: string; review?:
 
               {!isDuplicate && session.mode === 'add' ? <section className="card-target-override"><div><p className="eyebrow">ONE CARD ONLY</p><h3>Override destination</h3><p>Use another deck or note type for this card without changing the queue target.</p></div><div className="override-actions"><button className="button button--secondary" type="button" onClick={() => overrideOpen ? setOverrideOpen(false) : void openOverride()}>{overrideOpen ? 'Hide override' : draft?.targetOverride ? 'Edit override' : 'Override this card'}</button>{draft?.targetOverride ? <button className="text-button" type="button" onClick={clearOverride}>Use batch target</button> : null}</div>{overrideOpen ? <div className="override-form"><label className="field-label">Deck for this card</label><select className="select-input" value={draft?.targetOverride?.deckName ?? ''} onChange={(event) => void chooseOverrideDeck(event.target.value)}><option value="">Choose a deck</option>{decks.map((deck) => <option key={deck} value={deck}>{deck}</option>)}</select><label className="field-label">Note type for this card</label><select className="select-input" value={draft?.targetOverride?.modelName ?? ''} onChange={(event) => void chooseOverrideModel(event.target.value)}><option value="">Choose a note type</option>{[...overrideModels, ...models.filter((model) => !overrideModels.includes(model))].map((model) => <option key={model} value={model}>{model}{overrideModels.includes(model) ? ' (in deck)' : ''}</option>)}</select>{overrideSchema ? <div className="override-mapping"><label className="mapping-row">English word<select value={draft?.targetOverride?.fieldMapping?.englishField ?? ''} onChange={(event) => changeOverrideMapping({ englishField: event.target.value })}><option value="">Select field</option>{overrideSchema.fields.map((field) => <option key={field} value={field}>{field}</option>)}</select></label><label className="mapping-row">Polish translation<select value={draft?.targetOverride?.fieldMapping?.translationField ?? ''} onChange={(event) => changeOverrideMapping({ translationField: event.target.value })}><option value="">Select field</option>{overrideSchema.fields.map((field) => <option key={field} value={field}>{field}</option>)}</select></label><label className="mapping-row">Audio <span>optional</span><select value={draft?.targetOverride?.fieldMapping?.audioField ?? ''} onChange={(event) => changeOverrideMapping({ audioField: event.target.value })}><option value="">No audio field</option>{overrideSchema.fields.map((field) => <option key={field} value={field}>{field}</option>)}</select></label></div> : null}</div> : null}</section> : null}
 
-              <section className="commit-panel">{notice ? <p className="commit-panel__notice">{notice}</p> : null}<button className="button button--primary button--commit" type="button" disabled={saving || !draft || !cardReady || !effectiveConfigurationReady() || (isDuplicate && !existing)} onClick={() => void commitCurrent()}>{saving ? 'Saving...' : isDuplicate ? 'Replace and continue' : 'Create and continue'}</button><div className="commit-secondary-actions"><button className="text-button text-button--danger" type="button" disabled={saving} onClick={() => void skipCurrent()}>{isDuplicate ? 'Keep existing and skip' : 'Skip this word'}</button>{session.mode === 'add' ? <button className="text-button" type="button" disabled={saving} onClick={() => setCustomCardOpen(true)}>Create custom card</button> : null}</div></section>
+              <section className="commit-panel">{notice ? <p className="commit-panel__notice">{notice}</p> : null}<button className="button button--primary button--commit" type="button" disabled={saving || !draft || !cardReady || !effectiveConfigurationReady() || (isDuplicate && !existing)} onClick={() => void commitCurrent()}>{saving ? 'Saving...' : isDuplicate ? 'Update and continue' : 'Create and continue'}</button><div className="commit-secondary-actions"><button className="text-button text-button--danger" type="button" disabled={saving} onClick={() => void discardCurrent()}>{isReview ? 'Next review item' : 'Discard from queue'}</button>{session.mode === 'add' ? <button className="text-button" type="button" disabled={saving} onClick={() => setCustomCardOpen(true)}>Create custom card</button> : null}</div></section>
             </aside>
           </div>
           {overrideOpen && !isDuplicate && session.mode === 'add' ? <div className="override-destination-backdrop" role="dialog" aria-modal="true" aria-label="Override destination"><section className="override-destination-dialog"><div className="panel__heading"><div><p className="eyebrow">ONE CARD ONLY</p><h2>Override destination</h2><p>Choose another deck or note type for this card. The queue target will not change.</p></div><button className="tiny-button" type="button" onClick={() => setOverrideOpen(false)}>Close</button></div><label className="field-label">Deck for this card</label><select className="select-input" value={draft?.targetOverride?.deckName ?? ''} onChange={(event) => void chooseOverrideDeck(event.target.value)}><option value="">Choose a deck</option>{decks.map((deck) => <option key={deck} value={deck}>{deck}</option>)}</select><label className="field-label">Note type for this card</label><select className="select-input" value={draft?.targetOverride?.modelName ?? ''} onChange={(event) => void chooseOverrideModel(event.target.value)}><option value="">Choose a note type</option>{[...overrideModels, ...models.filter((model) => !overrideModels.includes(model))].map((model) => <option key={model} value={model}>{model}{overrideModels.includes(model) ? ' (in deck)' : ''}</option>)}</select>{overrideSchema ? <div className="override-mapping"><label className="mapping-row">English word<select value={draft?.targetOverride?.fieldMapping?.englishField ?? ''} onChange={(event) => changeOverrideMapping({ englishField: event.target.value })}><option value="">Select field</option>{overrideSchema.fields.map((field) => <option key={field} value={field}>{field}</option>)}</select></label><label className="mapping-row">Polish translation<select value={draft?.targetOverride?.fieldMapping?.translationField ?? ''} onChange={(event) => changeOverrideMapping({ translationField: event.target.value })}><option value="">Select field</option>{overrideSchema.fields.map((field) => <option key={field} value={field}>{field}</option>)}</select></label><label className="mapping-row">Audio <span>optional</span><select value={draft?.targetOverride?.fieldMapping?.audioField ?? ''} onChange={(event) => changeOverrideMapping({ audioField: event.target.value })}><option value="">No audio field</option>{overrideSchema.fields.map((field) => <option key={field} value={field}>{field}</option>)}</select></label></div> : null}<div className="override-destination-actions">{draft?.targetOverride ? <button className="button button--secondary" type="button" onClick={clearOverride}>Use batch target</button> : null}<button className="button button--primary" type="button" onClick={() => setOverrideOpen(false)}>Done</button></div></section></div> : null}
           {customCardOpen && session.mode === 'add' ? <CustomCardForm
             sessionId={sessionId as string}
+            entryId={String(session.current?.id)}
             currentWord={currentWord}
             initialDeckName={config.deckName}
             initialModelName={config.modelName}

@@ -50,5 +50,6 @@ may describe superseded behavior. Raise conflicts rather than treating old plans
 or current code as automatic approval of requirements.
 
 For installation and operational commands, use the [README](../README.md).
-During this walkthrough, changes to application behavior are recorded for later
-implementation. Documentation may evolve; application code/data stays untouched.
+The baseline walkthrough recorded behavior changes for separately authorized
+implementation. It is complete; later implementation updates (including Q-001)
+are recorded in the checkpoint, feature pages, ADRs, and backlog.

@@ -1,6 +1,34 @@
 # Project handbook walkthrough — checkpoint
 
-Last updated: 2026-11-19.
+Last updated: 2026-11-21.
+
+## Post-walkthrough Q-001 implementation — 2026-11-21
+
+The owner separately approved and implemented the file-backed queue refactor:
+
+- Main/book files now directly own pending vocabulary/order; SQLite persists
+  settings, an entry-bound draft/reference, save history, and removal receipts.
+- Browser upload/paste, queue naming/creation/editing/diffs/deletion were retired.
+- Discard replaces generic skip and keep-existing; it only removes the current
+  source entry and never deletes an Anki note. Duplicate-note deletion was removed;
+  existing notes are refreshed in place.
+- Completion consumes the exact original occurrence even after lookup spelling
+  changes. Concurrent CLI appends are preserved; entry IDs reject stale requests
+  and durable receipts protect interrupted-removal retries. Review saves no longer
+  implicitly clean the main vocabulary file.
+- Read-only comparison found 25 entries in the old main SQLite queue absent from
+  its file. The owner requested appending them at the end in queue order. This was
+  completed, checked again, then the database was backed up and snapshot rows retired
+  while retaining target settings. There were no imported add queues to export.
+
+Current authority: [queue rules](features/vocabulary-queues.md) and
+[ADR 0004](decisions/0004-file-backed-word-queues.md). `Q-002` draft removal remains
+optional; `S-001` confirmation simplification remains pending. The interview batches
+below are historical evidence, not a description of today's queue implementation.
+
+Verification: `python -m tools.check` passed on 2026-11-21 (Ruff, Pyright,
+132 offline tests with 2 live checks skipped, frontend TypeScript/build).
+No live Anki/Diki requests or collection changes were made during Q-001 work.
 
 ## Post-walkthrough implementation update — 2026-11-19
 
@@ -55,8 +83,8 @@ requirement. Do not keep drilling into low-value persistence conveniences.
 **Documentation-only instruction:** from batch 15 onward, record behavior-change
 requests in the root [to-do](../to-do) for separate implementation. Wording such as
 "change this" during this walkthrough is not permission to alter application code.
-The word source file itself is the authoritative queue; replacing the duplicated
-SQLite queue is accepted future work, `Q-001`. See
+The word source file itself is the authoritative queue; `Q-001` implemented removal
+of the duplicated SQLite queue on 2026-11-21. See
 [ADR 0004](decisions/0004-file-backed-word-queues.md). Do not ask more questions
 about synchronizing mirrored queues; that topic is settled.
 Pronunciation is dialect-neutral; either British or American is acceptable.
@@ -246,7 +274,7 @@ end so that small tools and legacy paths are not forgotten.
 | Area | Establish first | Next status |
 | --- | --- | --- |
 | Purpose, audience, real workflow, definition of a good result | No prerequisites | Foundation captured in `project.md`; detailed quality rules and platforms deferred |
-| Vocabulary sources, list ownership, queue meaning | Purpose and real workflow | Source-file queue confirmed (Q-001); per-word draft recovery optional, possible removal Q-002; detailed source bookkeeping deferred |
+| Vocabulary sources, list ownership, queue meaning | Purpose and real workflow | Q-001 implemented source-file queues and exact-entry bookkeeping; optional drafts retained, possible removal Q-002 |
 | Diki authority, meaning structure, matching, examples | Purpose and content needs | English/Polish text compatibility captured; source-group identity unnecessary; exact encoding pending |
 | Anki concepts, existing note types, fields, templates | Audience and definition of a good result | Batch-label rationale, default type, and partial IMAGE candidate semantics captured; image feature deferred |
 | Translation selection, editing, provenance, preview | Diki interpretation and Anki content expectations | Subjective text selection captured; selection-only UI tentative/deferred; grouping provenance unnecessary |

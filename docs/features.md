@@ -1,6 +1,6 @@
 # Feature map and specification coverage
 
-Last updated: 2026-11-19.
+Last updated: 2026-11-21.
 
 This is a living capability inventory. "Present" means observed in code or live
 Anki where noted, not that every path meets its intended contract or was freshly
@@ -9,7 +9,7 @@ tested. Specification status and implementation status are separate.
 | Capability | Purpose / owner intent | Implementation and specification state |
 | --- | --- | --- |
 | Dictionary CLI and capture | Resolve the Diki English entry, show usage examples, and append chosen vocabulary | Present; captured English words are Diki-compatible input. Source: `tools/diki_lookup.py` |
-| Word intake and processing | Consume main/book files as pending queues | Current SQLite snapshots mismatch intended file-backed queue. Accepted refactor: `Q-001`. [Rules](features/vocabulary-queues.md) |
+| Word intake and processing | Consume main/book files as pending queues | `Q-001` implemented: discover/open live files, consume exact current occurrences, preserve concurrent capture and recover interrupted removals. Upload/paste, queue editing/creation/deletion retired. [Rules](features/vocabulary-queues.md) |
 | Translation curation | Choose a diverse, useful set of Diki translation strings | Present; human selection confirmed. Editing/custom additions present, possible selection-only direction not final. [Diki contract](contracts/diki.md) |
 | Anki target selection | Select deck, note type, and field mapping for creation | Present; default type and historical deck context confirmed. [Anki contract](contracts/anki.md) |
 | Existing-note refresh | Gradually clean older manual translations through deterministic Diki selection | Present; purpose confirmed. Original-deck preservation fixed in `60cdb9f`. [Feature](features/existing-note-refresh.md) |
@@ -31,6 +31,11 @@ translation direction. They are not automatically accepted implementation tasks.
 Concrete requested changes are in [to-do](../to-do).
 
 ## Completed development and evidence
+
+On 2026-11-21, `Q-001` replaced SQLite word snapshots with live source queues.
+Discard replaces skip/keep-existing; duplicate-note deletion was retired in favor
+of update-in-place. The owner-approved 25 SQLite-only entries were appended to
+the main file before local queue migration. See [queue evidence](features/vocabulary-queues.md#migration-and-verification-evidence).
 
 Recent milestones and commits are in the
 [history baseline](review.md#repository-evidence-baseline). They include browser/

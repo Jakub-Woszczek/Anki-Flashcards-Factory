@@ -20,7 +20,9 @@ def clean(anki, store, *, resume=False):
                 saves = [
                     dict(row)
                     for row in db.execute(
-                        "SELECT * FROM word_saves WHERE profile=? AND state!='cleaned'", (profile,)
+                        """SELECT * FROM word_saves WHERE profile=? AND state!='cleaned'
+                        AND reason='already_in_anki'""",
+                        (profile,),
                     )
                 ]
             for save in saves:

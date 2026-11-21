@@ -1,6 +1,6 @@
 # Development and verification
 
-Last updated: 2026-11-19.
+Last updated: 2026-11-21.
 
 Status: default test boundary confirmed by the owner in interview batch 21.
 Legacy live tests were retired on 2026-11-19 and current discovery passes offline.
@@ -33,6 +33,15 @@ is not introduced for this local workbench.
 The 2026-11-19 full check passed: Ruff lint, formatting of 42 Python files,
 Pyright with zero errors/warnings, 109 tests run (2 live checks skipped), and the
 frontend production build. All configured local hooks were also exercised and passed.
+
+The 2026-11-21 Q-001 full `python -m tools.check` passed: Ruff lint/format
+(42 Python files), Pyright with zero errors/warnings, 132 offline tests run
+(2 opt-in live checks skipped), and frontend TypeScript/production build.
+New regressions cover live source counts, exact duplicate-line consumption,
+book isolation, changed lookup spellings, concurrent CLI capture/two workspaces,
+stale API requests, edits during lookup/audio preparation, legacy migration, and
+restart at removal/SQLite boundaries. API checks use in-process ASGI with temporary
+stores and fake integrations. No live Anki/Diki requests were used for this change.
 
 Local hooks check changed Python files with Ruff, then run project-wide Pyright
 and guarded tests for Python changes. Frontend changes trigger its type-check/build.

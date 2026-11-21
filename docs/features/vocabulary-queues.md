@@ -1,248 +1,151 @@
 # Vocabulary sources and queue lifecycle
 
-Last updated: 2026-11-19.
+Last updated: 2026-11-21.
 
-Specification status: source-file authority, core lifecycle, per-entry evaluation,
-and optional draft recovery confirmed. Draft removal is a possible simplification;
-exact source-entry bookkeeping remains open below.
+Status: file-backed processing implemented as `Q-001`. The owner approved the
+implementation and the UI simplifications below after the handbook walkthrough.
+Historical snapshot behavior is recorded in [the checkpoint](../review.md).
 
-Implementation status: mismatch. The current SQLite add-queue snapshot is not the
-intended architecture. Replacing it with file-backed processing is deferred as
-`Q-001`; book-source consumption and discard also remain incomplete.
+## Purpose and authority
 
-Verification status: initially source/test inspection. In batch 10, isolated
-completion/recovery tests ran for the deck-preservation fix; this is not acceptance
-verification of every intended queue/source lifecycle rule below.
+Main and book vocabulary files are mutable pending queues, not input to a second
+persisted queue. They shrink as individual entries are resolved. A book file is
+not an untouched archive of all original Kindle highlights.
 
-## Purpose and rationale
+- Main source: `words_to_add/words_to_add.txt`.
+- Book sources: `.txt` files under `words_to_add/`, including subdirectories.
+  The current Fablehaven file is `words_to_add/Fablehaven_flashcards_clean.txt`.
+- One nonempty line is one pending entry; file order is processing order.
+- UTF-8, an optional initial BOM, CRLF/LF, blank lines, and a missing final newline
+  are supported. Whitespace is trimmed for presenting/looking up the current word;
+  consuming it preserves the other original bytes.
+- File discovery accepts only files resolved inside the source directory; aliases
+  to the same resolved file share one workspace. Outside symlinks are excluded.
 
-Both everyday vocabulary and book vocabulary are pending work queues. They shrink
-as words are dealt with. A book file is not intended to remain an untouched,
-complete record of all highlights simply because it came from a book.
+See [project purpose](../project.md), [ADR 0002](../decisions/0002-per-entry-vocabulary-resolution.md),
+and [ADR 0004](../decisions/0004-file-backed-word-queues.md).
 
-Once a word is successfully added to Anki, the owner should not have to put it
-back into the queue. A word already in Anki is also no longer pending. The owner
-may reconsider vocabulary collected months earlier and decide not to learn it.
-These outcomes apply when evaluating the current entry, not as permission to
-scan other queued entries and resolve them in advance.
+## Homepage and intake
 
-See [project purpose and sources](../project.md) for the broader context.
+The homepage lists actual source files with current nonempty-entry counts,
+including empty sources. Open a source to process it. Refresh/reopen discovers new
+files and CLI additions; successful completion also reads the next entry from the
+current file. There is no continuous filesystem push into an already displayed word.
 
-## Confirmed intended behavior
+Maintain vocabulary using the text files and dictionary CLI capture. The owner
+explicitly retired these browser capabilities:
 
-### Sources are mutable pending queues
+- Pasting words or uploading a file to create an independent queue.
+- Queue naming and repeated main-file snapshot creation.
+- Homepage queue editing, add/delete/reorder, and diff UI.
+- Deleting saved queues through the homepage.
 
-- The main source is `words_to_add/words_to_add.txt`.
-- Book-specific vocabulary files are also pending queues.
-- Both kinds of source shrink when entries are resolved.
-- The source file **is the queue**, not merely input for another persistent queue.
-  The owner explicitly rejects duplicated SQLite word-queue state and the need
-  to synchronize it with the file.
-- Successful addition means the word is in Anki, not merely removed from a browser
-  session. For an acknowledged creation followed by a failed confirmation request,
-  the owner accepts a warning and normal completion/advancement (`S-001`); successful
-  follow-up read-back should not block that case. See the
-  [Anki completion rule](../contracts/anki.md#acknowledged-creation-with-failed-follow-up-confirmation).
+There is one persisted workspace association per source file. Anki target settings
+and an optional unfinished-word draft can persist independently of pending words.
+There is no SQLite pending-word/order mirror.
 
-### Resolution outcomes
+## Completion actions
 
-These describe semantics, not prescribed button labels or database states:
-
-| Outcome | Intended result |
-| --- | --- |
-| Successfully added to Anki | Consume the pending word |
-| Already in Anki after evaluating the current entry | Consume that pending entry rather than retaining it for later addition |
-| Owner decides not to learn the current entry | Remove that entry from its pending source without adding it |
-
-No separate deferral requirement was established by this answer. Do not interpret
-the current implementation's generic skip as the intended behavior for all three
-outcomes. Removing a pending word is distinct from deleting an existing Anki note.
-
-What counts as an existing Anki match will be defined with Anki identity and
-duplicate handling; these queue rules do not decide that matching policy.
-
-### Evaluate one entry at a time
-
-- Processing the current word must not trigger queue-wide or cross-list removal
-  of other pending entries. Evaluate those entries when their own turn arrives.
-- The owner uses Diki HTML to understand how Diki represents the current word,
-  then evaluates redundancy against Anki using that understanding.
-- In the owner's supplied Diki page example, queued `causes` leads to headword
-  `cause`, which is the intended Anki `en_word`. This is owner-provided page
-  evidence, not a new raw-HTML fixture or a general singularization rule.
-- Do not infer that raw queued forms are equivalent using stemming, spelling
-  similarity, or an apparent shared base word and silently remove them.
-- Automatic evaluation of other queued variants is not a current goal. The
-  owner's evaluation remains important to deciding whether a word is redundant.
-- A word present in Anki can therefore remain in another pending list until that
-  particular entry is reached and evaluated. This qualifies the earlier general
-  statement that already-added words should leave the queue.
-
-See [ADR 0002: Per-entry vocabulary resolution](../decisions/0002-per-entry-vocabulary-resolution.md).
-
-The raw queued text and the resolved dictionary word are conceptually distinct.
-Anki should store the relevant Diki headword: this is **Diki compatibility**.
-Completion concerns the current original source entry, rather than using the
-resolved spelling as permission to remove other pending entries. The technical
-association needed to achieve this is not chosen yet. See the
-[Diki contract](../contracts/diki.md).
-
-### Concurrent capture is expected
-
-The main list can grow through CLI capture while the workbench consumes it.
-This is normal use. Consuming an entry must not overwrite unrelated words appended
-concurrently. A saved browser snapshot must not be treated as a replacement for
-the current source file.
-
-The owner's answer is to remove the duplicated queue model, not choose between
-synchronization modes. Processing should operate on the file-backed queue.
-Detailed UI polling/notifications are not specified and are not a prerequisite
-to recording this direction. Do not reopen this as a request to synchronize two
-authoritative word lists.
-
-See [ADR 0004](../decisions/0004-file-backed-word-queues.md) and task `Q-001` in
-the [root to-do list](../../to-do). This change is for a separate implementation.
-
-### Resolve words during processing; no separate batch preparation
-
-The owner previously entered words manually, including forms that were not Diki
-headwords. A separate raw/prepared-list stage resolved those forms to compatible
-English entries before note creation.
-
-That stage was retired on 2026-11-19. The browser flow vets the current word and
-offers spelling/entry choices as it is processed, rather than preparing the whole
-list first. The dictionary CLI already performs lookup/selection before appending,
-so CLI-captured English entries are Diki-compatible input.
-
-This does not claim that every historical/manual/book entry is already compatible,
-or establish Polish field compatibility before translations have been selected.
-The current word-processing path still needs to handle unresolved source entries.
-The code, CLI entry point, obsolete tests, and raw/prepared vocabulary directories
-were removed as `L-001`; see the [roadmap](../roadmap.md#completed-legacy-code-cleanup-2026-11-19).
-
-### Current browser-session behavior — implementation mismatch
-
-- `backend/app.py` reads the main text file when creating a session, then
-  `SessionStore` persists its ordered words in SQLite. Subsequent reads use that
-  saved queue; this is a snapshot, not a live file-backed queue.
-- The add session also stores target configuration and the current draft.
-- The frontend schedules ordinary draft persistence after a short debounce and
-  attempts to flush it on `Exit to home`. Browser/tab-close behavior is not a
-  separately established durability guarantee.
-- Tag/flag review uses temporary browser state rather than persisted add-session
-  state. Existing Anki notes are still saved separately through the commit path.
-
-The copied word queue conflicts with the confirmed file-backed model. The owner
-separately clarified the role of an unfinished word's draft below.
-
-### Unfinished-word drafts: optional convenience
-
-If the owner closes the UI before saving a word to Anki, selecting its Polish
-translations again later is acceptable. Processing one word is little work, and
-the owner rarely leaves in the middle of it.
-
-Draft autosave/resume was accepted as a convenience during AI-assisted UI
-development, rather than arising from a strong workflow need. Its absence would
-make little difference to the owner.
-
-Removal is a possible simplification for a later session, not a firm requirement
-or an urgent correction. It is recorded as `Q-002` in [to-do](../../to-do). The
-existing behavior remains until a separate implementation decision.
-
-The pending word still belongs in the source file until it is resolved. This
-answer concerns unsaved per-word UI selections, not loss of committed Anki data,
-the Diki HTML/audio cache, or save verification/recovery. Persistence of other
-settings is not decided by this answer; do not generalize it to all storage.
-
-### Current book input and possible evolution
-
-- The current book input is similar to the main list: one word or phrase per line.
-- Historically, the owner manually downloaded a Kindle file and placed it
-  somewhere in the repository. No fixed book-folder convention was established.
-- It sometimes contains import artifacts such as quotes, apostrophes, brackets, or
-  parentheses. Exact cleanup rules have not been agreed.
-- The owner confirmed `"flimsy"` → `flimsy` as a representative cleanup example.
-- The owner recalls writing artifact-stripping code intended to preserve meaningful
-  characters. Its location and relationship to the current import path have not
-  been established; that recollection is not proof of current browser behavior.
-- Book import is infrequent, and its format is not considered settled. A future
-  input might be JSON containing a list of words/phrases.
-- JSON is a possible future format, not a requirement to implement now.
-- The quote example does not establish that punctuation should always be stripped.
-  Some punctuation is valid vocabulary content; broader cleanup rules remain open.
-
-## Current implementation and evidence
-
-| Area | Observed behavior | Evidence |
+| Action | Source result | Anki result |
 | --- | --- | --- |
-| Main capture | CLI offers to append after lookup; cooperating writers share a file lock | `tools/diki_lookup.py`, `backend/word_list.py` |
-| Browser import | Reads file contents, splits nonempty lines, submits words and an optional session name | `frontend/src/App.tsx`, `createImportSession` and `readImportFile` |
-| Session persistence | Stores ordered words separately in SQLite; source is a string, not an established editable-file association | `backend/storage.py`, `create_add_session` |
-| Verified cleanup | After Anki read-back, archives and removes matches from the configured main list | `backend/word_completion.py` |
-| Resolution order | Browser service checks for an existing Anki note using the submitted word before fetching Diki HTML | `backend/services.py`, `lookup_current` |
-| Diki lookup | Returns exact-headword translation groups or suggestions; does not expose a separate resolved canonical-word result | `external_apis/diki_api.py`, `lookup` and `parse_meanings` |
-| Book lists | Text files are discovered for offline preparation without source modification | `external_apis/diki_lists.py` |
-| Generic skip | Advances the browser queue without touching the source file | `backend/services.py`, `skip_current` |
+| Create and continue | Consume the current source entry after verified save | Create note |
+| Update and continue | Consume the current source entry after verified update | Update existing note in place; preserve current card decks |
+| Discard from queue | Consume the current source entry | No Anki mutation |
+| Create custom card | Consume the current source entry after verified save | Create the configured manual note |
+| Suspend duplicate and continue | Consume the current source entry after successful suspension | Suspend the existing note's cards |
 
-Relevant regression evidence inspected in
-[`tests/test_word_completion.py`](../../tests/test_word_completion.py):
+There is no generic skip-for-later action in vocabulary processing. Exit before
+resolving a word to leave it pending. **Discard from queue** also covers deciding
+that an existing Anki note already adequately covers the current word. A separate
+"Keep existing card" action would have the same effect and was removed.
 
-- `test_concurrent_append_waits_for_cleanup_and_is_not_lost` covers preservation of
-  concurrent capture with cooperating writers.
-- `test_skip_never_removes_from_source` explicitly describes current skip behavior;
-  it does not establish that this behavior meets the owner's discard requirement.
-- `test_legacy_cleanup_confirms_notes_and_archives_duplicates` covers a separate
-  historical cleanup command, not a complete interactive already-present outcome.
+The owner also retired **Delete duplicate note**: update-in-place is the supported
+overwrite workflow. Queue discard does not delete an Anki note or its cards.
 
-Commits `7e724bc` and `6eb461a` introduced verified main-list cleanup and recorded
-a subsequent cleanup operation respectively. See the
-[history baseline](../review.md#repository-evidence-baseline).
+Tag/flag review remains a separate, temporary browser traversal. Its **Next review
+item** action does not consume a vocabulary file, and its saves no longer perform
+implicit main-list cleanup.
 
-## Implementation gaps and unresolved decisions
+### Save confirmation
 
-1. **Authoritative queue refactor (`Q-001`):** remove the redundant SQLite add-queue
-   snapshot and use the source file directly. Record only during this walkthrough;
-   implementation and retirement of old session state happen separately.
-2. **Book-source consumption:** cleanup currently targets the configured main list.
-   An imported book's original pending file is not consumed by that path.
-3. **Source association:** browser file import sends content rather than establishing
-   which source entry the backend should update. Repository-local book files are
-   established practice, but an association mechanism has not been chosen. Do not
-   require the owner to settle an exact folder before documenting the workflow.
-4. **Per-entry resolution:** cleanup currently removes all matching normalized
-   lines from the main file, independent of queue origin. That does not implement
-   the desired rule of resolving the current source entry without evaluating other
-   pending entries. The required occurrence/source association remains to be designed.
-5. **Deliberate discard:** generic skip leaves source entries intact. That is not
-   sufficient for the owner's stated decision to stop learning a pending word.
-6. **Already-present completion:** define the interactive completion behavior after
-   the Anki matching rules are established; do not retain known resolved entries
-   merely because they were skipped in one session.
-7. **Import artifacts:** `"flimsy"` → `flimsy` is confirmed, but a full punctuation
-   policy is not. A targeted inspection did not identify the recalled historical
-   stripping routine in the current Python sources. The current browser import
-   trims whitespace rather than stripping quotes. Do not silently override the
-   existing `en_word` content contract.
-8. **Dictionary-informed identity:** current browser lookup checks Anki before Diki
-   using the submitted word. Intended stored identity is now confirmed as the
-   relevant Diki headword. Implementing this identity through selection, Anki
-   checks, and original-source consumption remains open; do not confuse agreement
-   on the outcome with an implemented raw-to-resolved association.
-9. **Acknowledged-create completion (`S-001`):** the current verifier retains a word
-   if follow-up read-back fails. The owner wants notification and continuation
-   for that rare case once creation is acknowledged; implementation is deferred.
+Current implementation still requires successful follow-up Anki verification for
+create/update/custom saves. The separately accepted warning-and-continue change
+for acknowledged creation with failed confirmation remains pending as `S-001`.
+See [Anki completion semantics](../contracts/anki.md#acknowledged-creation-with-failed-follow-up-confirmation).
 
-## Authority
+## Resolve one original entry at a time
 
-The intended semantics above come from the owner's second through twenty-second interview
-batches on 2026-11-17. Batch 3 clarifies that batch 2's already-present outcome is
-per-entry, not an eager queue-cleaning policy. Batch 4 establishes the resolved
-Diki headword as the intended stored English content. Batch 15 explicitly makes
-the source file authoritative and defers the SQLite queue refactor as a todo.
-Batch 16 confirms that redoing unsaved selections is acceptable and records draft
-removal as an optional simplification. Batch 19 deprecates whole-list preparation
-and confirms resolved English input from CLI capture. Batch 22 accepts completion
-with a warning after acknowledged creation if follow-up confirmation fails.
-Implementation observations are evidence, not newly accepted policy.
-Track interview progress and remaining questions in the
-[walkthrough checkpoint](../review.md).
+The original source entry and resolved dictionary word are distinct. If the first
+line is `causes`, selecting/saving `cause` consumes that original `causes` line.
+It does not remove another `cause`/`causes` line in the same or another source.
+
+Repeated lines count as separate pending entries and receive separate identities
+as they are reached. Do not stem, automatically equate variants, or scan other
+entries for eager Anki deduplication. The owner evaluates each entry at its turn.
+
+The intended Anki English value remains the relevant Diki headword. This refactor
+fixes raw-to-source consumption; it does not implement a new automatic canonical
+headword resolver or a complete Anki matching policy. See [Diki rules](../contracts/diki.md).
+
+## Concurrent capture, stale requests, and recovery
+
+Concurrent dictionary CLI capture is expected. Source operations and cooperating
+appends use a stable file lock and atomic replacement. SQLite contains only the
+current entry's identity, byte range, and source fingerprint, not the word queue.
+
+- An unchanged original file prefix permits new appended entries without dropping
+  the current draft or excluding the appended vocabulary from later processing.
+- Current-entry requests carry an entry ID. Requests from an old browser view
+  cannot save, discard, or apply a draft to the next occurrence, even if its text
+  is identical.
+- Other observed content edits invalidate the entry reference and draft. Reload
+  the source before continuing; the app does not guess which changed line to remove.
+- Every consumption archives the exact removed line and a pre-removal file backup
+  under `data/archives/source-<entry-id>.txt.bak`. A durable `source_resolutions`
+  receipt links the source workspace, entry, outcome, and Anki save where applicable.
+- Before/after hashes, sizes, and file identity allow retry across the file-write /
+  SQLite-commit boundary without consuming a second occurrence. An ambiguous
+  external change preserves the file and reports the pending receipt/backup for
+  investigation rather than guessing.
+- A verified Anki save followed by failed source removal remains retryable without
+  blindly creating another note. Save intents include source-entry identity.
+
+The explicit legacy `tools.clean_words_to_add` bulk command remains separate from
+normal processing. Its `--resume` retries its own `already_in_anki` operations,
+not source-workspace or review saves.
+
+## Unfinished-word drafts
+
+Draft autosave/resume remains a convenience associated with the current entry.
+The owner accepts reselecting translations; optional removal is still `Q-002`.
+It is separate from source queue ownership, Diki resource caching, and save recovery.
+Changing the observed source contents clears a stale draft; append-only growth does not.
+
+## Book content and remaining decisions
+
+Book files currently contain one word/phrase per line and can have artifacts such
+as quotes. The example `"flimsy"` → `flimsy` is confirmed, but no general punctuation
+stripping contract has been agreed. This refactor does not automatically rewrite
+book vocabulary or broaden the existing `en_word` syntax contract.
+
+Future import-format ideas and broader dictionary-informed matching remain future
+work. Browser upload/paste is deliberately retired rather than a missing feature.
+
+## Migration and verification evidence
+
+On 2026-11-21, read-only comparison found one legacy main add queue (394 pending
+entries) and no imported add queues. At the owner's request, its 25 entries absent
+from the main file were appended at the end in queue order. A second comparison
+found no remaining SQLite-only entries. Main-file pending count became 645;
+Fablehaven had 682. Counts are a migration snapshot, not fixed expectations.
+
+The local database was backed up to `data/archives/pre-q001-20261121.sqlite3`.
+Migration reused the main source's existing target settings, cleared its old draft,
+and retired its copied queue rows. Older review metadata is inactive history.
+No source entries were consumed and no live Anki/Diki requests were made during
+migration. Routine regression verification is offline with temporary files/fake Anki.
+
+Verification on 2026-11-21: `python -m tools.check` passed lint, formatting, Pyright,
+132 offline tests (2 opt-in live tests skipped), and frontend TypeScript/build.
+Regressions include current-entry API validation, concurrent writers/workspaces,
+external edits during lookup/audio preparation, and file-write/SQLite crash boundaries.

@@ -5,11 +5,11 @@ import sqlite3
 import threading
 import time
 from collections import Counter
-from difflib import SequenceMatcher
+from functools import wraps
 from typing import Any
 
 from backend.note_index import NotesDatabase
-from backend.storage import SessionStore
+from backend.storage import SessionStore, SourceChanged
 from backend.word_completion import VerificationError, WordCompletion
 from external_apis.anki_connect import AnkiConnect
 from external_apis.diki_api import DikiApi
@@ -24,6 +24,25 @@ class ServiceError(Exception):
         super().__init__(message)
         self.message = message
         self.status_code = status_code
+
+
+def source_action(method):
+    @wraps(method)
+    def guarded(self, session_id, *args, entry_id=None, **kwargs):
+        try:
+            with self.sessions.lock():
+                self.sessions.require_current(session_id, entry_id)
+                return method(self, session_id, *args, entry_id=entry_id, **kwargs)
+        except KeyError as error:
+            raise ServiceError("Source workspace was not found", 404) from error
+        except SourceChanged as error:
+            raise ServiceError(str(error), 409) from error
+        except (OSError, UnicodeError, sqlite3.Error) as error:
+            raise ServiceError(
+                f"Source operation failed; reload before continuing. {error}", 503
+            ) from error
+
+    return guarded
 
 
 class FactoryService:
@@ -154,11 +173,6 @@ class FactoryService:
         safe_word = re.sub(r'[<>:"/\\|?*\0]', "", word)
         return f"{safe_word}.mp3"
 
-    def create_add_session(self, words: list[str], source: str, name: str | None = None):
-        if not any(word.strip() for word in words):
-            raise ServiceError("Import at least one non-empty word")
-        return self.sessions.create_add_session(words, source, name)
-
     def _find_existing_note_id(self, word: str, session: dict[str, Any]) -> int | None:
         indexed_note_id = self.notes.get_note_id(word)
         if indexed_note_id:
@@ -193,18 +207,13 @@ class FactoryService:
             return self.sessions.get_session(session_id)
         except KeyError as error:
             raise ServiceError("Session was not found", 404) from error
+        except SourceChanged as error:
+            raise ServiceError(str(error), 409) from error
+        except (OSError, UnicodeError) as error:
+            raise ServiceError(f"Could not read source file: {error}", 503) from error
 
     def list_sessions(self):
         return self.sessions.list_sessions()
-
-    def delete_add_session(self, session_id: str):
-        session = self.session(session_id)
-        if session["mode"] != "add":
-            raise ServiceError("Only add-word queues can be deleted", 409)
-        try:
-            self.sessions.delete_session(session_id)
-        except KeyError as error:
-            raise ServiceError("Session was not found", 404) from error
 
     @staticmethod
     def _duplicate_note_id(session: dict[str, Any]) -> int:
@@ -215,8 +224,9 @@ class FactoryService:
             raise ServiceError("No duplicate Anki note is associated with this word", 404)
         return note_id
 
-    def suspend_duplicate_note(self, session_id: str):
-        session = self.session(session_id)
+    @source_action
+    def suspend_duplicate_note(self, session_id: str, *, entry_id: str | None = None):
+        session = self.sessions.require_current(session_id, entry_id)
         if session["mode"] != "add" or not session["current"]:
             raise ServiceError("This queue item is not available", 409)
         note_id = self._duplicate_note_id(session)
@@ -226,28 +236,9 @@ class FactoryService:
         result = {
             "action": "suspended duplicate",
             "noteId": note_id,
-            "session": self.sessions.complete_current(session_id),
-        }
-        result.update(self._sync_after_mutation())
-        return result
-
-    def delete_duplicate_note(self, session_id: str):
-        session = self.session(session_id)
-        if session["mode"] != "add" or not session["current"]:
-            raise ServiceError("This queue item is not available", 409)
-        note_id = self._duplicate_note_id(session)
-        self.anki.delete_note(note_id)
-        if self.anki.last_error:
-            raise ServiceError(self.anki.last_error, 503)
-
-        current_word = session["current"].get("word") or (session["draft"] or {}).get("word")
-        if isinstance(current_word, str) and self.notes.get_note_id(current_word) == note_id:
-            self.notes.delete_word(current_word)
-        draft = {**(session["draft"] or {}), "existingNoteId": None}
-        result = {
-            "action": "deleted duplicate",
-            "noteId": note_id,
-            "session": self.sessions.replace_current_draft(session_id, draft),
+            "session": self.sessions.complete_current(
+                session_id, session["current"]["id"], reason="suspended duplicate"
+            ),
         }
         result.update(self._sync_after_mutation())
         return result
@@ -257,71 +248,16 @@ class FactoryService:
             return self.sessions.update_session(session_id, **values)
         except KeyError as error:
             raise ServiceError("Session was not found", 404) from error
-
-    def replace_add_queue(self, session_id: str, words: list[str]):
-        try:
-            return self.sessions.replace_add_queue(session_id, words)
-        except KeyError as error:
-            raise ServiceError("Session was not found", 404) from error
-        except ValueError as error:
+        except SourceChanged as error:
             raise ServiceError(str(error), 409) from error
+        except (OSError, UnicodeError) as error:
+            raise ServiceError(f"Could not read source file: {error}", 503) from error
 
-    def queue_diff(self, session_id: str, words: list[str]):
-        session = self.session(session_id)
-        if session["mode"] != "add":
-            raise ServiceError("Only add-word queues can be edited", 409)
-
-        saved_words = [item["word"] for item in session["queue"] if item["word"]]
-        proposed_words = [word.strip() for word in words if word.strip()]
-        matcher = SequenceMatcher(None, saved_words, proposed_words, autojunk=False)
-        hunks = []
-        for group in matcher.get_grouped_opcodes(n=0):
-            saved_start = group[0][1]
-            saved_end = group[-1][2]
-            proposed_start = group[0][3]
-            proposed_end = group[-1][4]
-            lines = []
-            for tag, old_start, old_end, new_start, new_end in group:
-                if tag == "equal":
-                    lines.extend(
-                        {"kind": "context", "saved": word, "proposed": word}
-                        for word in saved_words[old_start:old_end]
-                    )
-                elif tag == "delete":
-                    lines.extend(
-                        {"kind": "remove", "saved": word, "proposed": None}
-                        for word in saved_words[old_start:old_end]
-                    )
-                elif tag == "insert":
-                    lines.extend(
-                        {"kind": "add", "saved": None, "proposed": word}
-                        for word in proposed_words[new_start:new_end]
-                    )
-                else:
-                    old_words = saved_words[old_start:old_end]
-                    new_words = proposed_words[new_start:new_end]
-                    lines.extend(
-                        {
-                            "kind": "change",
-                            "saved": old_words[index] if index < len(old_words) else None,
-                            "proposed": new_words[index] if index < len(new_words) else None,
-                        }
-                        for index in range(max(len(old_words), len(new_words)))
-                    )
-            hunks.append(
-                {
-                    "id": f"{saved_start}:{saved_end}:{proposed_start}:{proposed_end}",
-                    "savedStart": saved_start,
-                    "savedEnd": saved_end,
-                    "proposedStart": proposed_start,
-                    "proposedEnd": proposed_end,
-                    "lines": lines,
-                }
-            )
-        return {"savedWords": saved_words, "proposedWords": proposed_words, "hunks": hunks}
-
-    def lookup_current(self, session_id: str, requested_word: str | None = None):
-        session = self.session(session_id)
+    @source_action
+    def lookup_current(
+        self, session_id: str, requested_word: str | None = None, *, entry_id: str | None = None
+    ):
+        session = self.sessions.require_current(session_id, entry_id)
         current = session["current"]
         if not current:
             raise ServiceError("This session is complete", 409)
@@ -338,14 +274,17 @@ class FactoryService:
         except ResourceError as error:
             raise ServiceError(str(error), 503) from error
         draft = {
+            "entryId": current["id"],
             "sourceWord": raw_word,
             "word": word,
             "groups": self._translation_groups(translations),
             "tags": [],
             "existingNoteId": existing_note_id,
         }
-        self.sessions.replace_current_draft(session_id, draft)
+        self.sessions.replace_current_draft(session_id, draft, current["id"])
         return {
+            "entryId": current["id"],
+            "sourceWord": raw_word,
             "word": word,
             "exactMatch": bool(translations),
             "groups": draft["groups"],
@@ -353,12 +292,20 @@ class FactoryService:
             "existingNoteId": existing_note_id,
         }
 
-    def update_current_draft(self, session_id: str, draft: dict[str, Any]):
-        session = self.session(session_id)
+    @source_action
+    def update_current_draft(
+        self, session_id: str, draft: dict[str, Any], *, entry_id: str | None = None
+    ):
+        session = self.sessions.require_current(session_id, entry_id)
         if not session["current"]:
             raise ServiceError("This session is complete", 409)
         self._draft_word(draft, session["current"])
-        return self.sessions.replace_current_draft(session_id, draft)
+        draft = {
+            **draft,
+            "entryId": session["current"]["id"],
+            "sourceWord": session["current"]["word"],
+        }
+        return self.sessions.replace_current_draft(session_id, draft, session["current"]["id"])
 
     @staticmethod
     def _card_target(session: dict[str, Any], draft: dict[str, Any]) -> dict[str, Any]:
@@ -414,8 +361,9 @@ class FactoryService:
                 f"Configured fields are not in model {target['modelName']}: {', '.join(sorted(unknown_fields))}"
             )
 
-    def preview_current(self, session_id: str):
-        session = self.session(session_id)
+    @source_action
+    def preview_current(self, session_id: str, *, entry_id: str | None = None):
+        session = self.sessions.require_current(session_id, entry_id)
         if not session["current"]:
             raise ServiceError("This session is complete", 409)
         draft = session["draft"]
@@ -509,6 +457,7 @@ class FactoryService:
         word: str,
         flag: int | None,
         card_id: int | None,
+        source_entry: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         english_field = target["fieldMapping"].get("englishField")
         if (
@@ -525,8 +474,11 @@ class FactoryService:
             "removeTags": sorted(remove_tags),
             "action": action,
         }
+        if source_entry is not None:
+            intent["sourceEntry"] = source_entry
         try:
             with self.completions.lock():
+                self._validate_source_entry(source_entry)
                 profile = self.completions.profile(self.anki)
                 save, resumed = self.completions.prepare(profile, word, intent, action)
                 if resumed:
@@ -534,6 +486,7 @@ class FactoryService:
                     saved = self.completions.get(save["id"])
                     expected = json.loads(saved["expected_json"])
                     result = {
+                        "saveId": save["id"],
                         "action": "created" if action == "create" else "updated",
                         "noteId": saved["note_id"],
                         "audioDownloaded": bool(
@@ -556,9 +509,14 @@ class FactoryService:
                     word,
                     flag,
                     card_id,
+                    source_entry,
                 )
         except (VerificationError, OSError, sqlite3.Error) as error:
             raise ServiceError(f"Save not confirmed; word retained. {error}", 503) from error
+
+    def _validate_source_entry(self, source_entry):
+        if source_entry is not None:
+            self.sessions.require_current(source_entry["sessionId"], source_entry["entryId"])
 
     def _commit_and_verify(
         self,
@@ -572,6 +530,7 @@ class FactoryService:
         word,
         flag,
         card_id,
+        source_entry,
     ):
         audio_downloaded = self._write_audio(word)
         audio_field = target["fieldMapping"].get("audioField")
@@ -584,6 +543,7 @@ class FactoryService:
             tags = [tag for tag in tags if tag != "noAudio"]
             remove_tags = [*remove_tags, "noAudio"]
 
+        self._validate_source_entry(source_entry)
         if action == "create":
             if existing_note_id:
                 raise ServiceError(
@@ -641,6 +601,7 @@ class FactoryService:
                 "removeTags": sorted(set(remove_tags) - set(tags)),
             }
             self.completions.submitted(save_id, existing_note_id, expected)
+            self._validate_source_entry(source_entry)
             self.anki.update_note_fields(existing_note_id, update_fields)
             if self.anki.last_error:
                 raise ServiceError(self.anki.last_error, 503)
@@ -659,6 +620,7 @@ class FactoryService:
                 "audioDownloaded": audio_downloaded,
             }
 
+        result["saveId"] = save_id
         result.update(self.completions.finish(self.anki, save_id))
         self.notes.load_db()
         if flag is not None and action == "create" and not card_id:
@@ -675,10 +637,35 @@ class FactoryService:
         result.update(self._sync_after_mutation())
         return result
 
+    def _complete_source(self, session, result):
+        try:
+            result["session"] = self.sessions.complete_current(
+                session["id"],
+                session["current"]["id"],
+                reason=result["action"],
+                save_id=result.get("saveId"),
+            )
+            result["removedLines"] = 1
+        except (OSError, UnicodeError, sqlite3.Error, SourceChanged) as error:
+            result.update(
+                cleanupPending=True,
+                cleanupWarning=f"Note verified; source consumption is pending: {error}",
+            )
+            # Keep the existing entry/draft for retry. Do not refresh/rebind it here.
+            result["session"] = session
+        return result
+
+    @source_action
     def commit_current(
-        self, session_id: str, action: str, remove_tags: list[str], flag: int | None
+        self,
+        session_id: str,
+        action: str,
+        remove_tags: list[str],
+        flag: int | None,
+        *,
+        entry_id: str | None = None,
     ):
-        session = self.session(session_id)
+        session = self.sessions.require_current(session_id, entry_id)
         current = session["current"]
         if not current:
             raise ServiceError("This session is complete", 409)
@@ -707,25 +694,26 @@ class FactoryService:
             word,
             flag,
             current.get("cardId"),
+            {"sessionId": session_id, "entryId": current["id"], "source": session["source"]},
         )
-        result["session"] = (
-            self.session(session_id)
-            if result.get("cleanupPending")
-            else self.sessions.complete_current(session_id)
-        )
-        return result
+        return self._complete_source(session, result)
 
-    def skip_current(self, session_id: str):
-        return self.sessions.complete_current(session_id)
+    @source_action
+    def discard_current(self, session_id: str, *, entry_id: str | None = None):
+        session = self.sessions.require_current(session_id, entry_id)
+        return self.sessions.complete_current(session_id, session["current"]["id"])
 
+    @source_action
     def create_custom_card(
         self,
         session_id: str,
         deck_name: str,
         model_name: str,
         fields: dict[str, str],
+        *,
+        entry_id: str | None = None,
     ):
-        session = self.session(session_id)
+        session = self.sessions.require_current(session_id, entry_id)
         current = session["current"]
         if not current:
             raise ServiceError("This session is complete", 409)
@@ -749,28 +737,36 @@ class FactoryService:
             with self.completions.lock():
                 profile = self.completions.profile(self.anki)
                 save, resumed = self.completions.prepare(
-                    profile, queue_word, expected, "custom", expected=expected
+                    profile,
+                    queue_word,
+                    {
+                        **expected,
+                        "sourceEntry": {
+                            "sessionId": session_id,
+                            "entryId": current["id"],
+                            "source": session["source"],
+                        },
+                    },
+                    "custom",
+                    expected=expected,
                 )
                 if resumed:
                     self.completions.recover(self.anki, save)
                     note_id = self.completions.get(save["id"])["note_id"]
                 else:
+                    self.sessions.require_current(session_id, current["id"])
                     note_id = self.anki.add_note(deck_name, model_name, note_fields)
                     if type(note_id) is not int or note_id <= 0:
                         raise ServiceError(
                             self.anki.last_error or "Anki rejected the custom note", 409
                         )
                     self.completions.submitted(save["id"], note_id, expected)
-                result = {"action": "created custom card", "noteId": note_id}
+                result = {"action": "created custom card", "noteId": note_id, "saveId": save["id"]}
                 result.update(self.completions.finish(self.anki, save["id"]))
                 self.notes.load_db()
         except (VerificationError, OSError, sqlite3.Error) as error:
             raise ServiceError(f"Save not confirmed; word retained. {error}", 503) from error
-        result["session"] = (
-            self.session(session_id)
-            if result.get("cleanupPending")
-            else self.sessions.complete_current(session_id)
-        )
+        result = self._complete_source(session, result)
         result.update(self._sync_after_mutation())
         return result
 

@@ -1,6 +1,6 @@
 # Future work and deferred discussions
 
-Last updated: 2026-11-19.
+Last updated: 2026-11-21.
 
 This is a small record of future work explicitly mentioned by the owner during
 the handbook walkthrough. Entries are not an implementation authorization or an
@@ -11,17 +11,27 @@ Behavior changes requested during the walkthrough are recorded in the root
 [to-do list](../to-do) for a separate implementation session. This roadmap supplies
 context and deferred feature ideas; it is not permission to implement them here.
 
-## Recorded change: use source files as the only word queues (`Q-001`)
+## Completed: use source files as the only word queues (`Q-001`)
 
 The owner explicitly wants `words_to_add/words_to_add.txt` itself to be the queue.
-The current persisted SQLite copy adds unnecessary state and synchronization.
+The former persisted SQLite copy added unnecessary state and synchronization.
 
-Todo: replace the duplicated add-queue/snapshot model with file-backed processing
-and consumption. The source-file lifecycle and concurrent CLI capture still apply.
+Implemented 2026-11-21: replaced the duplicated add-queue/snapshot model with live
+file processing and exact-current-entry consumption. Shared locks preserve CLI
+appends; entry IDs and durable removal receipts protect retries/duplicate lines.
 Per-word draft recovery is optional as described below. Settings persistence is
 separate; removing unrelated SQLite indexes or journals is not requested.
 
-Status: accepted direction, not implemented; tracked as `Q-001` in [to-do](../to-do).
+The owner also retired upload/paste queue creation, queue naming, homepage queue
+editing/deletion, and duplicate Anki-note deletion. Discard is the sole skip-like
+vocabulary action, including keeping an already adequate existing note unchanged.
+Review saves no longer implicitly consume main-list words.
+
+Before retiring the local main snapshot, its 25 SQLite-only entries were appended
+to the main file as requested; there were no imported add queues to export.
+The local database was backed up and existing target settings reused.
+
+Status: completed; tracked as `Q-001` in [to-do](../to-do).
 See [ADR 0004](decisions/0004-file-backed-word-queues.md) and
 [vocabulary queue rules](features/vocabulary-queues.md).
 
@@ -31,13 +41,12 @@ The owner rarely interrupts processing a word, and re-selecting unsaved
 translations is little effort. Draft autosave/resume is a rarely used convenience
 with little effect on the core workflow.
 
-Status: possible simplification, not a firm removal requirement. Record for the
-later queue/UI refactor; leave the current behavior in place during this
-walkthrough. Task `Q-002` in [to-do](../to-do) captures the candidate.
+Status: possible simplification, not a firm removal requirement. The Q-001 refactor
+retained entry-bound drafts; task `Q-002` remains an optional future change.
 
 This concerns per-word UI drafts, not the reusable Diki cache or durable save
 verification/recovery records. See
-[draft expectations](features/vocabulary-queues.md#unfinished-word-drafts-optional-convenience).
+[draft expectations](features/vocabulary-queues.md#unfinished-word-drafts).
 
 ## Deprecated workflow: whole-list word preprocessing (`L-001`)
 
@@ -229,9 +238,10 @@ See [multiple genuine headwords](contracts/diki.md#multiple-genuine-headwords).
 
 ## Specification-to-implementation gaps
 
-Known differences such as original-source consumption, deliberate discard, and
-dictionary-headword identity are recorded beside their rules in
-[vocabulary queues](features/vocabulary-queues.md#implementation-gaps-and-unresolved-decisions)
+Original-source consumption and deliberate discard were implemented in Q-001.
+Remaining details such as dictionary-headword-first matching and import-artifact
+rules are recorded beside their rules in
+[vocabulary queues](features/vocabulary-queues.md#book-content-and-remaining-decisions)
 and the [Diki contract](contracts/diki.md#implementation-evidence-and-gaps).
 They have not been prioritized into an implementation plan during this walkthrough.
 

@@ -3,7 +3,7 @@ from unittest import TestCase
 
 from backend.services import FactoryService
 from external_apis.diki_resources import NoAudio
-from tests.completion_helpers import ReadBackAnki, install_completion
+from tests.completion_helpers import ReadBackAnki, install_completion, install_source
 
 
 class FakeAnki:
@@ -55,49 +55,14 @@ class FakeCustomCardAnki(ReadBackAnki):
         return True
 
 
-class FakeCustomSessions:
-    def __init__(self):
-        self.completed = None
-
-    def complete_current(self, session_id):
-        self.completed = session_id
-        return {"id": session_id, "remainingCount": 0}
-
-
 class FakeDuplicateActionAnki:
     last_error = None
 
     def suspend_note_cards(self, note_id):
         self.suspended_note_id = note_id
 
-    def delete_note(self, note_id):
-        self.deleted_note_id = note_id
-
     def sync(self):
         return True
-
-
-class FakeDuplicateActionIndex:
-    def __init__(self):
-        self.note_id = 99
-        self.deleted_words = []
-
-    def get_note_id(self, _word):
-        return self.note_id
-
-    def delete_word(self, word):
-        self.deleted_words.append(word)
-        self.note_id = None
-
-
-class FakeDuplicateActionSessions:
-    def complete_current(self, session_id):
-        self.completed = session_id
-        return {"id": session_id, "remainingCount": 0}
-
-    def replace_current_draft(self, session_id, draft):
-        self.replaced = (session_id, draft)
-        return {"id": session_id, "draft": draft}
 
 
 class FakeFlaggedCreateAnki(ReadBackAnki):
@@ -201,15 +166,10 @@ class TestTargetSelection(TestCase):
         install_completion(self, service)
         service.anki = FakeCustomCardAnki()
         service.notes = FakeIndex()
-        service.sessions = FakeCustomSessions()
-        service.session = lambda _session_id: {
-            "mode": "add",
-            "current": {"word": "streamline"},
-            "draft": {},
-        }
+        session = install_source(service)
 
         result = service.create_custom_card(
-            "session-1",
+            session["id"],
             "English::test",
             "Basic",
             {"Front": "streamline", "Back": "custom meaning"},
@@ -224,44 +184,24 @@ class TestTargetSelection(TestCase):
                 tuple(db.execute("SELECT note_id,en_word FROM note_index").fetchone()),
                 (99, "streamline"),
             )
-        self.assertEqual(service.sessions.completed, "session-1")
+        self.assertEqual(result["session"]["current"]["word"], "take")
+        self.assertEqual(service.completions.words_path.read_text(), "take\n")
         self.assertEqual(result["noteId"], 99)
 
     def test_suspending_a_duplicate_note_advances_the_queue(self):
         service: Any = FactoryService.__new__(FactoryService)
+        install_completion(self, service)
         service.anki = FakeDuplicateActionAnki()
-        service.sessions = FakeDuplicateActionSessions()
-        service.session = lambda _session_id: {
-            "mode": "add",
-            "current": {"word": "streamline"},
-            "draft": {"word": "streamline", "existingNoteId": 99},
-        }
+        session = install_source(service)
+        service.sessions.replace_current_draft(
+            session["id"], {"word": "streamline", "existingNoteId": 99}
+        )
 
-        result = service.suspend_duplicate_note("session-1")
+        result = service.suspend_duplicate_note(session["id"])
 
         self.assertEqual(service.anki.suspended_note_id, 99)
-        self.assertEqual(service.sessions.completed, "session-1")
+        self.assertEqual(result["session"]["current"]["word"], "take")
         self.assertEqual(result["action"], "suspended duplicate")
-
-    def test_deleting_a_duplicate_note_clears_the_local_index_and_draft(self):
-        service: Any = FactoryService.__new__(FactoryService)
-        service.anki = FakeDuplicateActionAnki()
-        service.notes = FakeDuplicateActionIndex()
-        service.sessions = FakeDuplicateActionSessions()
-        service.session = lambda _session_id: {
-            "mode": "add",
-            "current": {"word": "streamline"},
-            "draft": {"word": "streamline", "existingNoteId": 99},
-        }
-
-        result = service.delete_duplicate_note("session-1")
-
-        self.assertEqual(service.anki.deleted_note_id, 99)
-        self.assertEqual(service.notes.deleted_words, ["streamline"])
-        self.assertEqual(
-            service.sessions.replaced, ("session-1", {"word": "streamline", "existingNoteId": None})
-        )
-        self.assertEqual(result["action"], "deleted duplicate")
 
     def test_creating_a_note_flags_every_generated_card(self):
         service: Any = FactoryService.__new__(FactoryService)
