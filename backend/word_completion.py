@@ -18,6 +18,10 @@ class VerificationError(Exception):
     pass
 
 
+class ConfirmationUnavailable(VerificationError):
+    """A confirmation request failed, rather than returning mismatching content."""
+
+
 def field_word(value: str) -> str:
     return normalize_word(re.sub(r"<[^>]+>", " ", html.unescape(value)))
 
@@ -53,6 +57,9 @@ class WordCompletion:
                     note_id INTEGER NOT NULL
                 );
             """)
+            columns = {row[1] for row in db.execute("PRAGMA table_info(word_saves)")}
+            if "confirmation_warning" not in columns:
+                db.execute("ALTER TABLE word_saves ADD COLUMN confirmation_warning TEXT")
 
     @contextmanager
     def connect(self):
@@ -107,14 +114,31 @@ class WordCompletion:
         with self.connect() as db:
             return dict(db.execute("SELECT * FROM word_saves WHERE id=?", (save_id,)).fetchone())
 
-    def submitted(self, save_id, note_id, expected):
+    def submitted(self, save_id, note_id, expected, *, acknowledged=False):
         if type(note_id) is not int or note_id <= 0:
             raise VerificationError("Anki did not return a valid note ID; word retained")
         with self.connect() as db:
             db.execute(
-                "UPDATE word_saves SET note_id=?,expected_json=? WHERE id=?",
-                (note_id, json.dumps(expected, ensure_ascii=False), save_id),
+                "UPDATE word_saves SET note_id=?,expected_json=?,state=? WHERE id=?",
+                (
+                    note_id,
+                    json.dumps(expected, ensure_ascii=False),
+                    "submitted" if acknowledged else "pending",
+                    save_id,
+                ),
             )
+
+    def completed_for_entry(self, session_id, entry_id):
+        """Find accepted saves by their durable original-source association."""
+        with self.connect() as db:
+            row = db.execute(
+                """SELECT * FROM word_saves WHERE state IN ('verified','acknowledged')
+                AND json_extract(expected_json, '$.sourceEntry.sessionId')=?
+                AND json_extract(expected_json, '$.sourceEntry.entryId')=?
+                ORDER BY created_at DESC LIMIT 1""",
+                (session_id, entry_id),
+            ).fetchone()
+        return dict(row) if row else None
 
     def expect(self, save_id, expected):
         with self.connect() as db:
@@ -179,8 +203,13 @@ class WordCompletion:
     @staticmethod
     def compare(anki, note_id, expected):
         note = anki.get_note(note_id)
-        if anki.last_error or not note or note.get("noteId") != note_id:
-            raise VerificationError(anki.last_error or f"Note {note_id} was not found on read-back")
+        if anki.last_error:
+            raise ConfirmationUnavailable(
+                f"the app could not fetch the saved note from Anki (notesInfo): {anki.last_error}. "
+                "Saved content could not be verified."
+            )
+        if not note or note.get("noteId") != note_id:
+            raise VerificationError(f"Note {note_id} was not found on read-back; word retained")
         differences = []
         if note.get("modelName") != expected.get("modelName"):
             differences.append("note type")
@@ -196,9 +225,19 @@ class WordCompletion:
             differences.append("missing tags")
         if set(expected.get("removeTags", [])) & tags:
             differences.append("tags not removed")
+        if differences:
+            raise VerificationError(
+                f"Note {note_id} was read back from Anki, but differs from the submitted content: "
+                f"{', '.join(differences)}. Word retained."
+            )
         if "cardDecks" in expected or expected.get("deckName"):
             cards = anki.get_note_cards(note_id)
-            if anki.last_error or not cards:
+            if anki.last_error:
+                raise ConfirmationUnavailable(
+                    "the app could not fetch its card/deck information from Anki "
+                    f"(findCards/cardsInfo): {anki.last_error}. Deck placement could not be verified."
+                )
+            if not cards:
                 differences.append("deck")
             elif "cardDecks" in expected:
                 if WordCompletion.card_decks(cards) != expected["cardDecks"]:
@@ -207,14 +246,14 @@ class WordCompletion:
                 differences.append("deck")
         if differences:
             raise VerificationError(
-                f"Note {note_id} verification failed: {', '.join(differences)}. Word retained."
+                f"Note {note_id} was read back from Anki, but its card/deck assignments "
+                "do not match the expected decks. Word retained."
             )
         return note
 
     def verify(self, anki, save_id):
         save = self.get(save_id)
-        if self.profile(anki) != save["profile"]:
-            raise VerificationError("Anki profile changed; word retained")
+        self._check_confirmation_profile(anki, save["profile"])
         if type(save["note_id"]) is not int or save["note_id"] <= 0:
             raise VerificationError("No confirmed Anki note ID; word retained")
         expected = json.loads(save["expected_json"])
@@ -223,8 +262,7 @@ class WordCompletion:
             note.get("fields", {}).get(expected.get("englishField"), {}).get("value")
             or save["word"]
         )
-        if self.profile(anki) != save["profile"]:
-            raise VerificationError("Anki profile changed during read-back; word retained")
+        self._check_confirmation_profile(anki, save["profile"])
         # Persist confirmation and the local index together, before touching the list.
         with self.connect() as db:
             db.execute(
@@ -239,6 +277,18 @@ class WordCompletion:
                 (save["word"], stored_word, save["note_id"]),
             )
         return note
+
+    @classmethod
+    def _check_confirmation_profile(cls, anki, expected_profile):
+        try:
+            profile = cls.profile(anki)
+        except VerificationError as error:
+            raise ConfirmationUnavailable(
+                f"the app could not fetch the active Anki profile (getActiveProfile): {error}. "
+                "Save confirmation could not be completed."
+            ) from error
+        if profile != expected_profile:
+            raise VerificationError("Anki profile changed; word retained")
 
     def cleanup(self, save_ids):
         """Archive lines before replacement; replay is safe after either commit boundary."""
@@ -287,7 +337,38 @@ class WordCompletion:
         return {"removedLines": len(removed), "backupPath": str(backup) if backup else None}
 
     def finish(self, anki, save_id):
-        self.verify(anki, save_id)
+        save = self.get(save_id)
+        if save["state"] != "acknowledged":
+            try:
+                self.verify(anki, save_id)
+            except ConfirmationUnavailable as error:
+                # Only an explicit positive addNote reply qualifies. A recovered
+                # unknown write or an update must still pass verification.
+                if save["state"] != "submitted" or save["reason"] not in {"create", "custom"}:
+                    raise
+                warning = f"Note {save['note_id']} was created in Anki, but {error}"
+                with self.connect() as db:
+                    db.execute(
+                        "UPDATE word_saves SET state='acknowledged',confirmation_warning=? WHERE id=?",
+                        (warning, save_id),
+                    )
+                save = self.get(save_id)
+            except VerificationError:
+                # Once a concrete mismatch/profile change was observed, a later
+                # request outage must not turn it into an accepted creation.
+                with self.connect() as db:
+                    db.execute(
+                        "UPDATE word_saves SET state='pending' WHERE id=? AND state='submitted'",
+                        (save_id,),
+                    )
+                raise
+        if save["state"] == "acknowledged":
+            return {
+                "verified": False,
+                "acknowledged": True,
+                "confirmationWarning": save["confirmation_warning"],
+                "cleanupPending": False,
+            }
         # Interactive saves have no implicit main-file cleanup. The source workspace
         # consumes its exact entry separately; stateless review consumes no source.
         return {"verified": True, "cleanupPending": False}

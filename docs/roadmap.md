@@ -134,16 +134,15 @@ hooks, a single full-check command, and a macOS CI job make verification repeata
 The owner considers the discussed case of Anki creating a note and the follow-up
 confirmation request failing too rare to justify blocking their workflow.
 
-Intended behavior: notify that creation succeeded but confirmation failed, then
-continue normally. Treat acknowledgement as sufficient completion in that case.
-The current strict read-back/recovery path is not the desired user experience
-for this scenario.
-
-Status: accepted simplification, recorded as `S-001` in [to-do](../to-do) for a
-separate implementation session. See
+Status: **completed 2026-11-21**. A positive creation reply followed by an
+unavailable confirmation request now records acknowledged-but-unverified completion,
+shows the failed request and actual error, and consumes the exact source entry.
+Read-back mismatches, observed profile changes, updates, and unacknowledged writes
+retain their error/recovery behavior. Local source-removal failure instead exposes
+**Retry queue removal**, a durable local-only retry that also works after reopening.
+See
 [Anki completion semantics](contracts/anki.md#acknowledged-creation-with-failed-follow-up-confirmation).
-This does not specify every unacknowledged write/error outcome or request removal
-of all operation records.
+The existing save journal remains; unverified acknowledgement is not a verified audit.
 
 ## Future discussion: contract-first cleanup of older notes
 

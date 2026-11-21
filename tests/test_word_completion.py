@@ -179,13 +179,15 @@ class TestWordCompletion(TestCase):
             )
             self.assertEqual(db.execute("SELECT state FROM word_saves").fetchone()[0], "cleaned")
 
-    def test_read_back_failure_retains_word_and_retry_does_not_add_again(self):
+    def test_acknowledged_unverified_creation_does_not_authorize_legacy_bulk_cleanup(self):
+        session = self.source_session()
         self.anki.bad_read = True
-        with self.assertRaisesRegex(ServiceError, "Read-back unavailable"):
-            self.commit()
-        self.assertEqual(self.words.read_bytes(), self.original)
-        self.anki.bad_read = False
-        self.assertTrue(self.commit()["resumed"])
+        result = self.service.commit_current(session["id"], "create", [], None)
+        self.assertFalse(result["verified"])
+        self.assertIn("Read-back unavailable", result["confirmationWarning"])
+        with self.assertRaisesRegex(VerificationError, "Unverified words"):
+            self.store.cleanup([result["saveId"]])
+        self.assertEqual(self.words.read_bytes(), b"\r\nkeep  this\r\n take \r\nlast")
         self.assertEqual(self.anki.add_calls, 1)
 
     def test_add_timeout_resolves_saved_payload_without_creating_duplicate(self):
@@ -385,9 +387,19 @@ class TestWordCompletion(TestCase):
 
     def test_failed_custom_verification_does_not_advance_queue(self):
         session = self.source_session()
-        self.anki.bad_read = True
-        with self.assertRaises(ServiceError):
-            self.service.create_custom_card(session["id"], "English", "Basic", {"en_word": "take"})
+        real_get = self.anki.get_note
+
+        def mismatched(note_id):
+            note = real_get(note_id)
+            assert note is not None
+            note["fields"]["en_word"]["value"] = "wrong"
+            return note
+
+        with patch.object(self.anki, "get_note", side_effect=mismatched):
+            with self.assertRaisesRegex(ServiceError, "field en_word"):
+                self.service.create_custom_card(
+                    session["id"], "English", "Basic", {"en_word": "take"}
+                )
         self.assertEqual(self.service.session(session["id"])["completedCount"], 0)
         self.assertEqual(self.words.read_bytes(), self.original)
 
@@ -489,21 +501,196 @@ class TestWordCompletion(TestCase):
         self.assertEqual(self.anki.add_calls, 0)
         self.assertEqual(self.words.read_bytes(), b"different\nword\n")
 
-    def test_source_readback_failure_keeps_entry_and_retry_reuses_note(self):
+    def test_source_readback_request_failure_warns_and_advances(self):
         session = self.source_session()
         self.anki.bad_read = True
-        with self.assertRaises(ServiceError):
-            self.service.commit_current(
-                session["id"], "create", [], None, entry_id=session["current"]["id"]
-            )
-        self.assertEqual(self.words.read_bytes(), self.original)
-        self.anki.bad_read = False
         result = self.service.commit_current(
             session["id"], "create", [], None, entry_id=session["current"]["id"]
         )
-        self.assertTrue(result["resumed"])
+        self.assertFalse(result["verified"])
+        self.assertTrue(result["acknowledged"])
+        self.assertIn("notesInfo", result["confirmationWarning"])
+        self.assertIn("Read-back unavailable", result["confirmationWarning"])
+        self.assertEqual(result["session"]["current"]["word"], "keep  this")
+        saved = self.store.get(result["saveId"])
+        self.assertEqual(saved["state"], "acknowledged")
+        self.assertIsNone(saved["verified_at"])
+        self.assertIsNone(saved["observed_json"])
         self.assertEqual(self.anki.add_calls, 1)
         self.assertEqual(self.words.read_bytes(), b"\r\nkeep  this\r\n take \r\nlast")
+
+    def test_acknowledged_custom_creation_warns_and_empties_last_source_entry(self):
+        self.words.write_bytes(b"take\n")
+        session = self.source_session()
+        self.anki.bad_read = True
+        result = self.service.create_custom_card(
+            session["id"], "English", "Basic", {"en_word": "take"}
+        )
+        self.assertFalse(result["verified"])
+        self.assertIn("notesInfo", result["confirmationWarning"])
+        self.assertIsNone(result["session"]["current"])
+        self.assertEqual(self.words.read_bytes(), b"")
+
+    def test_card_request_failure_names_unverified_deck_placement(self):
+        session = self.source_session()
+
+        def unavailable(_note_id):
+            self.anki.last_error = "card lookup timed out"
+            return []
+
+        with patch.object(self.anki, "get_note_cards", side_effect=unavailable):
+            result = self.service.commit_current(session["id"], "create", [], None)
+        self.assertFalse(result["verified"])
+        self.assertIn("findCards/cardsInfo", result["confirmationWarning"])
+        self.assertIn("card lookup timed out", result["confirmationWarning"])
+        self.assertIn("Deck placement could not be verified", result["confirmationWarning"])
+        self.assertFalse(result["cleanupPending"])
+
+    def test_anki_unavailable_immediately_after_creation_warns_about_profile_request(self):
+        session = self.source_session()
+        real_invoke = self.anki.invoke
+
+        def unavailable_after_creation(action, **params):
+            if action == "getActiveProfile" and self.anki.add_calls:
+                self.anki.last_error = "Anki connection refused"
+                return None
+            return real_invoke(action, **params)
+
+        with patch.object(self.anki, "invoke", side_effect=unavailable_after_creation):
+            result = self.service.commit_current(session["id"], "create", [], None)
+        self.assertIn("getActiveProfile", result["confirmationWarning"])
+        self.assertIn("Anki connection refused", result["confirmationWarning"])
+        self.assertEqual(result["removedLines"], 1)
+
+    def test_known_content_mismatch_cannot_later_be_bypassed_by_unavailable_fetch(self):
+        session = self.source_session()
+        real_get = self.anki.get_note
+
+        def mismatched(note_id):
+            note = real_get(note_id)
+            assert note is not None
+            note["fields"]["pl_translation"]["value"] = "wrong"
+            return note
+
+        with patch.object(self.anki, "get_note", side_effect=mismatched):
+            with self.assertRaisesRegex(ServiceError, "field pl_translation"):
+                self.service.commit_current(session["id"], "create", [], None)
+        self.anki.bad_read = True
+        with self.assertRaisesRegex(ServiceError, "notesInfo"):
+            self.service.commit_current(session["id"], "create", [], None)
+        self.assertEqual(self.words.read_bytes(), self.original)
+        self.assertEqual(self.anki.add_calls, 1)
+
+    def test_known_mismatch_is_reported_before_a_later_deck_request_can_fail(self):
+        self.anki.add_note("English", "Basic", {"en_word": "wrong"})
+        with patch.object(self.anki, "get_note_cards") as cards:
+            with self.assertRaisesRegex(VerificationError, "field en_word"):
+                self.store.compare(
+                    self.anki,
+                    123,
+                    {"fields": {"en_word": "take"}, "modelName": "Basic", "deckName": "English"},
+                )
+        cards.assert_not_called()
+
+    def test_profile_change_still_keeps_source_entry(self):
+        session = self.source_session()
+        real_add = self.anki.add_note
+
+        def changed_profile(*args):
+            note_id = real_add(*args)
+            self.anki.profile = "Another profile"
+            return note_id
+
+        with patch.object(self.anki, "add_note", side_effect=changed_profile):
+            with self.assertRaisesRegex(ServiceError, "profile changed"):
+                self.service.commit_current(session["id"], "create", [], None)
+        self.assertEqual(self.words.read_bytes(), self.original)
+
+    def test_successful_readback_reporting_missing_note_or_wrong_deck_is_not_a_warning(self):
+        for problem in ("missing note", "wrong deck"):
+            with self.subTest(problem=problem):
+                # Separate stores avoid replaying the earlier subcase's failed save.
+                directory = tempfile.TemporaryDirectory()
+                self.addCleanup(directory.cleanup)
+                root = Path(directory.name)
+                self.words = root / "words.txt"
+                self.words.write_bytes(self.original)
+                self.store = WordCompletion(root / "test.sqlite3", self.words)
+                self.service.completions = self.store
+                session = self.source_session()
+                if problem == "missing note":
+                    with patch.object(self.anki, "get_note", return_value=None):
+                        with self.assertRaisesRegex(ServiceError, "not found on read-back"):
+                            self.service.commit_current(session["id"], "create", [], None)
+                else:
+                    with patch.object(
+                        self.anki,
+                        "get_note_cards",
+                        return_value=[{"cardId": 1230, "deckName": "Wrong deck"}],
+                    ):
+                        with self.assertRaisesRegex(ServiceError, "deck"):
+                            self.service.commit_current(session["id"], "create", [], None)
+                self.assertEqual(self.words.read_bytes(), self.original)
+
+    def test_update_confirmation_request_failure_still_keeps_source_entry(self):
+        session = self.source_session()
+        self.anki.add_note("English", "Basic", {"en_word": "take"})
+        self.service.sessions.replace_current_draft(
+            session["id"], {**session["draft"], "existingNoteId": 123}
+        )
+        real_update = self.anki.update_note_fields
+
+        def updated_then_unavailable(*args):
+            real_update(*args)
+            self.anki.bad_read = True
+
+        with patch.object(self.anki, "update_note_fields", side_effect=updated_then_unavailable):
+            with self.assertRaisesRegex(ServiceError, "notesInfo"):
+                self.service.commit_current(session["id"], "update", [], None)
+        self.assertEqual(self.words.read_bytes(), self.original)
+
+    def test_removal_retry_survives_restart_and_never_calls_anki_or_creates_again(self):
+        session = self.source_session()
+        self.anki.bad_read = True
+        with patch.object(
+            self.service.sessions, "complete_current", side_effect=OSError("disk busy")
+        ):
+            result = self.service.commit_current(session["id"], "create", [], None)
+        self.assertTrue(result["cleanupPending"])
+        self.assertIn("disk busy", result["cleanupWarning"])
+        self.assertNotIn("verified;", result["cleanupWarning"])
+        self.assertEqual(result["session"]["pendingRemoval"]["noteId"], 123)
+        self.service.sessions = SessionStore(self.store.db_path, self.root)
+        self.service.completions = WordCompletion(self.store.db_path, self.words)
+        self.service.anki = Mock()
+        reopened = self.service.session(session["id"])
+        self.assertIn("notesInfo", reopened["pendingRemoval"]["confirmationWarning"])
+        append_word(self.words, "concurrent capture")
+        retried = self.service.retry_source_removal(
+            session["id"], entry_id=session["current"]["id"]
+        )
+        self.assertFalse(retried["cleanupPending"])
+        self.assertFalse(retried["verified"])
+        self.assertEqual(
+            self.words.read_bytes(), b"\r\nkeep  this\r\n take \r\nlast\nconcurrent capture\n"
+        )
+        self.assertEqual(self.anki.add_calls, 1)
+        self.assertEqual(self.service.anki.mock_calls, [])
+
+    def test_repeat_create_after_removal_failure_ignores_changed_draft_and_anki_outage(self):
+        session = self.source_session()
+        with patch.object(
+            self.service.sessions, "complete_current", side_effect=OSError("disk busy")
+        ):
+            self.service.commit_current(session["id"], "create", [], None)
+        self.service.sessions.replace_current_draft(
+            session["id"], {"word": "different", "groups": []}
+        )
+        self.service.anki = Mock()
+        result = self.service.commit_current(session["id"], "create", [], None)
+        self.assertFalse(result["cleanupPending"])
+        self.assertTrue(result["verified"])
+        self.assertEqual(self.service.anki.mock_calls, [])
 
     def test_separate_source_entries_do_not_replay_each_others_save_intents(self):
         self.words.write_bytes(b"take\ntake\n")

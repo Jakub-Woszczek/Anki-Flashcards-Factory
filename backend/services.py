@@ -214,7 +214,12 @@ class FactoryService:
 
     def session(self, session_id: str):
         try:
-            return self.sessions.get_session(session_id)
+            session = self.sessions.get_session(session_id)
+            if getattr(self, "completions", None) and session.get("current"):
+                save = self.completions.completed_for_entry(session_id, session["current"]["id"])
+                if save:
+                    session["pendingRemoval"] = self._source_save_result(save)
+            return session
         except KeyError as error:
             raise ServiceError("Session was not found", 404) from error
         except SourceChanged as error:
@@ -554,12 +559,13 @@ class FactoryService:
                 "englishField": english_field,
                 "fields": fields,
                 "tags": tags,
+                "sourceEntry": source_entry,
             }
             self.completions.expect(save_id, expected)
             note_id = self.anki.add_note(target["deckName"], target["modelName"], fields, tags)
             if type(note_id) is not int or note_id <= 0:
                 raise ServiceError(self.anki.last_error or "Anki rejected the new note", 409)
-            self.completions.submitted(save_id, note_id, expected)
+            self.completions.submitted(save_id, note_id, expected, acknowledged=True)
             result = {"action": "created", "noteId": note_id, "audioDownloaded": audio_downloaded}
         else:
             if not existing_note_id:
@@ -603,6 +609,7 @@ class FactoryService:
                 "fields": expected_fields,
                 "tags": tags,
                 "removeTags": sorted(set(remove_tags) - set(tags)),
+                "sourceEntry": source_entry,
             }
             self.completions.submitted(save_id, existing_note_id, expected)
             self._validate_source_entry(source_entry)
@@ -650,14 +657,44 @@ class FactoryService:
                 save_id=result.get("saveId"),
             )
             result["removedLines"] = 1
+            result["cleanupPending"] = False
         except (OSError, UnicodeError, sqlite3.Error, SourceChanged) as error:
             result.update(
                 cleanupPending=True,
-                cleanupWarning=f"Note verified; source consumption is pending: {error}",
+                cleanupWarning=(
+                    f"Note {result['noteId']} was {'updated' if result['action'] == 'updated' else 'created'} "
+                    f"in Anki, but its queue entry could not be removed: {error}. "
+                    "Use Retry queue removal to finish."
+                ),
             )
             # Keep the existing entry/draft for retry. Do not refresh/rebind it here.
-            result["session"] = session
+            result["session"] = {
+                **session,
+                "pendingRemoval": {key: value for key, value in result.items() if key != "session"},
+            }
         return result
+
+    @staticmethod
+    def _source_save_result(save):
+        return {
+            "saveId": save["id"],
+            "noteId": save["note_id"],
+            "action": {"create": "created", "custom": "created custom card", "update": "updated"}[
+                save["reason"]
+            ],
+            "verified": save["state"] == "verified",
+            "confirmationWarning": save["confirmation_warning"],
+            "cleanupPending": True,
+        }
+
+    @source_action
+    def retry_source_removal(self, session_id: str, *, entry_id: str | None = None):
+        session = self.sessions.require_current(session_id, entry_id)
+        save = self.completions.completed_for_entry(session_id, session["current"]["id"])
+        if not save:
+            raise ServiceError("There is no completed save for this source entry", 409)
+        # Local-only retry: never create, read back, flag, or sync an Anki note.
+        return self._complete_source(session, self._source_save_result(save))
 
     @source_action
     def commit_current(
@@ -673,6 +710,8 @@ class FactoryService:
         current = session["current"]
         if not current:
             raise ServiceError("This session is complete", 409)
+        if self.completions.completed_for_entry(session_id, current["id"]):
+            return self.retry_source_removal(session_id, entry_id=current["id"])
         draft = session["draft"]
         if not draft:
             raise ServiceError("Load and configure the current card before saving")
@@ -722,6 +761,8 @@ class FactoryService:
             raise ServiceError("This session is complete", 409)
         if session["mode"] != "add":
             raise ServiceError("Custom cards can only be created from an add queue", 409)
+        if self.completions.completed_for_entry(session_id, current["id"]):
+            return self.retry_source_removal(session_id, entry_id=current["id"])
 
         schema = self.anki.model_schema(model_name)
         if schema is None:
@@ -735,7 +776,16 @@ class FactoryService:
         queue_word = current.get("word") or (session["draft"] or {}).get("word")
         if not isinstance(queue_word, str) or not queue_word.strip():
             raise ServiceError("The queue word is missing")
-        expected = {"deckName": deck_name, "modelName": model_name, "fields": note_fields}
+        expected = {
+            "deckName": deck_name,
+            "modelName": model_name,
+            "fields": note_fields,
+            "sourceEntry": {
+                "sessionId": session_id,
+                "entryId": current["id"],
+                "source": session["source"],
+            },
+        }
         try:
             with self.completions.lock():
                 profile = self.completions.profile(self.anki)
@@ -763,7 +813,7 @@ class FactoryService:
                         raise ServiceError(
                             self.anki.last_error or "Anki rejected the custom note", 409
                         )
-                    self.completions.submitted(save["id"], note_id, expected)
+                    self.completions.submitted(save["id"], note_id, expected, acknowledged=True)
                 result = {"action": "created custom card", "noteId": note_id, "saveId": save["id"]}
                 result.update(self.completions.finish(self.anki, save["id"]))
                 self.notes.load_db()

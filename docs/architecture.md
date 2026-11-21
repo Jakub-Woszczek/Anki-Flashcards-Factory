@@ -70,7 +70,7 @@ retired. Active browser index operations and cached audio upload remain. See the
 | Anki notes, cards, decks, learning state | Local Anki | Access through AnkiConnect; local indexes/journals do not replace the collection |
 | Dictionary source | Retained HTML/audio snapshot | Shared local files with metadata; no routine refresh, per ADR 0003 |
 | Stored-field rules | Agreed note contracts | Current parser/auditor covers `en_word` syntax only |
-| Save verification/recovery | Local operation journal | Expected/observed content and original card/deck assignments support read-back/retry |
+| Save verification/recovery | Local operation journal | Expected/observed content and original decks support read-back/retry; acknowledged-but-unverified creation is recorded distinctly |
 | Source consumption/recovery | Exact-entry removal receipt and file backup | `source_resolutions` records before/after fingerprints and completion; current entry IDs reject stale requests |
 | Unfinished-word UI selections | Optional convenience | Current drafts persist; owner accepts redoing selections, and possible removal is `Q-002` |
 | Review traversal | Current browser state | Current temporary snapshot supports revisiting study-marked items; red/orange have the same attention-marker meaning |
@@ -98,11 +98,12 @@ consumes its own entry, while tag/flag review saves consume no file. The precise
 workflow gaps remain visible in the feature/contract pages rather than being
 presented as already implemented architecture.
 
-For the discussed case of acknowledged note creation followed by a failed
-confirmation request, intended behavior is notification and continuation. Current
-blocking read-back behavior is slated for simplification as `S-001`; the existing
-journal is an implementation fact, not an owner requirement for handling every
-rare failure with a blocking recovery flow.
+`S-001` implements warning-and-continue for acknowledged creation followed by an
+unavailable confirmation request. The journal distinguishes positive submission,
+verified saves, and acknowledged-but-unverified completion. Actual mismatches,
+profile changes, and updates remain strict. Accepted saves retain their original
+source association; **Retry queue removal** uses it to finish only local source
+consumption without calling Anki, including after a restart.
 
 ## Known mismatches and open areas
 
@@ -113,7 +114,8 @@ rare failure with a blocking recovery flow.
   meanings/resources remain separate; see [ADR 0005](decisions/0005-diki-headwords-and-case.md).
 - Custom/edited Polish text remains possible; selection-only is a tentative decision.
 - Prefetch discovers text lists, without the intended bounded-buffer-to-existing-note preparation tier.
-- Failed follow-up confirmation currently blocks acknowledged-create completion; intended behavior is warning-and-continue (`S-001`).
+- Acknowledged-create confirmation-fetch failures warn and continue (`S-001`);
+  source-removal failures expose a local-only retry with precise error feedback.
 - Detailed review-completion mechanics and some failure/preservation rules still need owner input.
 - The standard checks, hooks, and CI enforce the offline test boundary through `tools.test_offline` (`T-002`). See [development](development.md).
 

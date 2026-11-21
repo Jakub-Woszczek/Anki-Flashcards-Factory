@@ -48,10 +48,10 @@ There is no SQLite pending-word/order mirror.
 
 | Action | Source result | Anki result |
 | --- | --- | --- |
-| Create and continue | Consume the current source entry after verified save | Create note |
+| Create and continue | Consume the current source entry after verification or acknowledged creation with unavailable confirmation | Create note |
 | Update and continue | Consume the current source entry after verified update | Update existing note in place; preserve current card decks |
 | Discard from queue | Consume the current source entry | No Anki mutation |
-| Create custom card | Consume the current source entry after verified save | Create the configured manual note |
+| Create custom card | Same creation-completion rule as above | Create the configured manual note |
 
 There is no generic skip-for-later action in vocabulary processing. Exit before
 resolving a word to leave it pending. **Discard from queue** also covers deciding
@@ -74,9 +74,12 @@ implicit main-list cleanup.
 
 ### Save confirmation
 
-Current implementation still requires successful follow-up Anki verification for
-create/update/custom saves. The separately accepted warning-and-continue change
-for acknowledged creation with failed confirmation remains pending as `S-001`.
+`S-001` is implemented: a positive creation acknowledgement followed by an
+unavailable confirmation request shows the failed request/error and advances after
+exact-entry removal. Actual read-back mismatches and update failures remain blocking.
+If source removal itself fails, the browser shows **Retry queue removal**, including
+after reopening the workspace. That explicit local-only retry never creates or
+reconfirms a note, and preserves concurrent capture and other duplicate occurrences.
 See [Anki completion semantics](../contracts/anki.md#acknowledged-creation-with-failed-follow-up-confirmation).
 
 ## Resolve one original entry at a time
@@ -116,7 +119,8 @@ current entry's identity, byte range, and source fingerprint, not the word queue
   SQLite-commit boundary without consuming a second occurrence. An ambiguous
   external change preserves the file and reports the pending receipt/backup for
   investigation rather than guessing.
-- A verified Anki save followed by failed source removal remains retryable without
+- An accepted Anki save (verified or acknowledged under S-001) followed by failed
+  source removal remains retryable without
   blindly creating another note. Save intents include source-entry identity.
 
 The explicit legacy `tools.clean_words_to_add` bulk command remains separate from

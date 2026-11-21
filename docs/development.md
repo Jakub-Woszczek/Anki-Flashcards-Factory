@@ -54,6 +54,16 @@ Diki comparisons preceded implementation and are recorded separately in
 [ADR 0005](decisions/0005-diki-headwords-and-case.md); no live Anki operation or
 dictionary fixture refresh was performed for verification.
 
+The subsequent S-001 full check passed on 2026-11-21: Ruff lint/format, Pyright
+with zero errors/warnings, 156 tests run (154 passed, 2 opt-in live checks skipped),
+and frontend TypeScript/build. Eleven added regression methods and updated older
+expectations cover acknowledged normal/custom creation, precise note/profile/deck
+request warnings, strict missing-note/content/deck/profile/update handling, known
+mismatches followed by outages, verified-only legacy bulk cleanup, and restart-safe
+local source-removal retries. API coverage verifies entry validation, persistent
+pending-removal responses, no Anki calls during retry, and stale retry rejection.
+No real Anki/Diki request or collection operation was used for verification.
+
 Local hooks check changed Python files with Ruff, then run project-wide Pyright
 and guarded tests for Python changes. Frontend changes trigger its type-check/build.
 Activate the development environment before committing. GitHub Actions runs the

@@ -9,6 +9,9 @@ from unittest.mock import Mock, patch
 
 from backend.services import FactoryService
 from backend.storage import SessionStore
+from backend.word_completion import WordCompletion
+from external_apis.diki_resources import NoAudio
+from tests.test_word_completion import MemoryAnki
 
 
 class TestSourceAPI(TestCase):
@@ -103,4 +106,49 @@ class TestSourceAPI(TestCase):
             with self.subTest(path=path):
                 self.assertIn(self.request(method, path, body)[0], (404, 405))
         self.assertEqual(self.words.read_bytes(), b"same\nsame\nnew\n")
+        self.assertEqual(self.service.anki.mock_calls, [])
+
+    def test_acknowledged_creation_warning_and_local_only_removal_retry(self):
+        self.service.completions = WordCompletion(self.service.sessions.path, self.words)
+        self.service.anki = MemoryAnki()
+        self.service.anki.bad_read = True
+        self.service.notes = Mock()
+        self.service.diki = Mock(last_error="No audio")
+        self.service.diki.fetch_audio.side_effect = NoAudio("No audio")
+        self.service.sessions.update_session(
+            self.session["id"],
+            deck_name="English",
+            model_name="Basic",
+            field_mapping={"englishField": "en_word", "translationField": "pl_translation"},
+        )
+        self.service.sessions.replace_current_draft(
+            self.session["id"], {"word": "same", "groups": []}
+        )
+        base = f"/backend/sessions/{self.session['id']}"
+        retry = f"{base}/current/retry-removal"
+        body = {"entryId": self.session["current"]["id"]}
+        self.assertEqual(self.request("POST", retry, {})[0], 422)
+        self.assertEqual(self.request("POST", retry, body)[0], 409)
+        with patch.object(
+            self.service.sessions, "complete_current", side_effect=OSError("disk full")
+        ):
+            status, result = self.request(
+                "POST", f"{base}/current/commit", {**body, "action": "create"}
+            )
+        self.assertEqual(status, 200)
+        self.assertFalse(result["verified"])
+        self.assertTrue(result["cleanupPending"])
+        self.assertIn("notesInfo", result["confirmationWarning"])
+        self.assertIn("disk full", result["cleanupWarning"])
+        self.assertEqual(self.words.read_bytes(), b"same\nsame\n")
+        self.service.anki = Mock()
+        status, reopened = self.request("GET", base)
+        self.assertEqual(status, 200)
+        self.assertEqual(reopened["pendingRemoval"]["noteId"], 123)
+        status, retried = self.request("POST", retry, body)
+        self.assertEqual(status, 200)
+        self.assertFalse(retried["cleanupPending"])
+        self.assertIn("notesInfo", retried["confirmationWarning"])
+        self.assertEqual(self.words.read_bytes(), b"same\n")
+        self.assertEqual(self.request("POST", retry, body)[0], 409)
         self.assertEqual(self.service.anki.mock_calls, [])

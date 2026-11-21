@@ -71,7 +71,9 @@ and retained a local database backup. See [queue migration evidence](../features
 
 The documentation-only constraint applied to the original walkthrough. Q-001 was
 separately authorized for implementation; `Q-002` draft removal remains optional
-and `S-001` failed-confirmation simplification remains a separate pending task.
+and `S-001` was implemented later on the same date: confirmation-fetch failures
+after acknowledged creation warn and continue, with a local-only source-removal
+retry if needed. See [Anki completion rules](../contracts/anki.md#acknowledged-creation-with-failed-follow-up-confirmation).
 
 See [vocabulary queue rules](../features/vocabulary-queues.md) and
 [the walkthrough checkpoint](../review.md).

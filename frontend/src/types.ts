@@ -66,7 +66,24 @@ export type Session = {
   updatedAt: string
   remainingCount: number
   current: QueueItem | null
+  pendingRemoval?: SaveResult
 }
+
+export type SaveResult = {
+  action: string
+  noteId: number
+  saveId: string
+  verified: boolean
+  audioDownloaded?: boolean
+  audioError?: string
+  flagWarning?: string
+  syncWarning?: string
+  confirmationWarning?: string | null
+  cleanupWarning?: string
+  cleanupPending?: boolean
+}
+
+export type SourceSaveResult = SaveResult & { session: Session }
 
 export type SessionSummary = Pick<
   Session,

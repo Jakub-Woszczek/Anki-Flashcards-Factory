@@ -140,7 +140,12 @@ Po zapisie aplikacja odczytuje notatke przez AnkiConnect po zwroconym `noteId`
 i porownuje typ, wyslane pola, wymagane/usuwane tagi oraz talie kart. Nowe notatki
 trafiaja do wybranej talii; aktualizacja zachowuje dotychczasowa talie kazdej karty
 istniejacej notatki i sprawdza ja przy odczycie kontrolnym oraz ponowieniu zapisu.
-Dopiero po zgodnym odczycie usuwa **jeden biezacy, oryginalny wpis z jego pliku**.
+Po zgodnym odczycie usuwa **jeden biezacy, oryginalny wpis z jego pliku**.
+Wyjatek S-001: gdy Anki zwrocilo poprawny identyfikator utworzonej notatki, ale
+pozniejsze zadanie potwierdzajace zawiodlo, aplikacja pokazuje konkretne zadanie,
+blad i zakres nieudanej kontroli, po czym usuwa wpis i przechodzi dalej. Brak
+odczytu nie oznacza, ze zawartosc jest bledna. Rzeczywista niezgodnosc odczytanych
+pol/talii i bledy potwierdzenia aktualizacji nadal zatrzymuja przetwarzanie.
 Dotyczy to tworzenia, aktualizacji i custom cards; wpis z ksiazki znika z pliku
 tej ksiazki. Zapisanie `cause` dla oryginalnego `causes` usuwa ten wpis `causes`,
 bez usuwania innych wystapien lub wariantow. Zapis w review nie zmienia list slow.
@@ -162,11 +167,18 @@ blokuje zadania ze starego widoku; porownanie pliku i trwale potwierdzenie usuni
 chronia kolejne identyczne wystapienie przy ponowieniu po awarii. Niejednoznaczna
 zewnetrzna zmiana zachowuje plik i wymaga sprawdzenia zrodla/kopii zapasowej.
 
-Nieudana weryfikacja pozostawia slowo i kolejke. Jesli Anki zapisalo notatke,
-ale odpowiedz/odczyt zawiodly, ponowienie najpierw sprawdza poprzednia operacje,
-zamiast slepo tworzyc duplikat. Nieudane usuniecie z pliku jest raportowane jako
-`cleanupPending`; jego ponowienie nie tworzy kolejnej notatki. Synchronizacja
-z AnkiWeb nie jest warunkiem lokalnego potwierdzenia.
+Brak potwierdzenia samego utworzenia (bez poprawnego `noteId`) pozostawia wpis
+do dotychczasowego odzyskania; aplikacja nie tworzy slepo duplikatu. Utworzenie
+zaakceptowane bez odczytu kontrolnego jest zapisane jako `acknowledged`, nie
+`verified`, wraz z ostrzezeniem. Ten wyjatek nie uprawnia do zbiorczego czyszczenia.
+
+Nieudane usuniecie z pliku jest raportowane jako `cleanupPending`. Widok pokazuje
+przyczyne i przycisk **Retry queue removal** zamiast ponownego tworzenia notatki.
+Kliknij go, aby ponowic tylko lokalne usuniecie oryginalnego wpisu: bez tworzenia,
+odczytu kontrolnego, flagowania ani synchronizacji Anki. Widok ten wraca tez po
+ponownym otwarciu zrodla. Sam blad pobrania potwierdzenia nie wymaga tego klikniecia
+— tylko dodatkowy blad usuniecia wpisu. Synchronizacja z AnkiWeb nie jest warunkiem
+lokalnego potwierdzenia.
 
 Z dzialajacym Anki mozna tez oczyscic historyczne wpisy (po dokladnym dopasowaniu
 `en_word`, bez porownywania dawnych tlumaczen z nieistniejacym payloadem):

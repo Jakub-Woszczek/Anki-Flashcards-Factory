@@ -153,7 +153,8 @@ note ID; no live scheduling audit was performed for this correction.
 
 ## Source queue completion
 
-Create/update/custom saves first use the existing Anki verification rules, then
+Create/custom saves complete after successful verification or the acknowledged-
+creation exception below; updates require successful verification. They then
 consume only their original current source entry. The saved English spelling can
 differ from that original entry. Other occurrences and other source files remain
 pending until evaluated. Save intents include source-entry identity so separate
@@ -166,26 +167,54 @@ its saves do not implicitly clean the main list. See [queue rules](../features/v
 
 ## Acknowledged creation with failed follow-up confirmation
 
-Precondition: Anki has accepted creation of the note; a subsequent confirmation/
-read-back request fails. The owner considers this a very rare case in personal
-use and prefers simple feedback over a blocking recovery workflow.
+Implemented as `S-001` on 2026-11-21. Precondition: `addNote` returned a positive
+integer note ID; a later confirmation request is unavailable. Both normal and
+custom-note creation use this rule.
 
-Intended behavior:
+- Accept completion, remove the exact source entry, and advance automatically.
+- Explain which request failed, its actual AnkiConnect error, and what could not
+  be verified. A failed fetch is not evidence of incorrect stored content.
+- Example: **"Note 123 was created in Anki, but the app could not fetch the saved
+  note from Anki (notesInfo): [error]. Saved content could not be verified."**
+- Failed `findCards/cardsInfo` requests name card/deck retrieval and unverified
+  deck placement. An unavailable follow-up `getActiveProfile` request names profile
+  retrieval and incomplete confirmation. An actually observed profile change is
+  an error, not this warning case.
+- The browser says it continued only after source removal succeeds, or reports
+  that the source is empty if its last entry was consumed.
 
-- Show a notification such as **"Note created, but confirmation failed."**
-- Continue normal processing to the next word. Acknowledged creation is sufficient
-  to complete the current source entry in this discussed case.
-- Do not make successful follow-up read-back a mandatory queue-advancement gate
-  for that acknowledged creation.
+Successful read-back reporting a missing note, wrong fields/tags/type/deck, and
+existing-note update failures remain errors that retain the source entry. Once a
+concrete mismatch/profile change has been observed, a later request failure cannot
+bypass it. Writes without a valid creation acknowledgement retain their existing
+recovery rules; finding a note during recovery does not fabricate acknowledgement.
 
-The current code is stricter: it retains the pending word when verification
-fails. Changing that behavior is recorded as `S-001` in [to-do](../../to-do), not
-implemented during this walkthrough. This decision covers the discussed successful
-creation followed by a failed confirmation request; other save-error cases were
-not newly specified by the answer.
+### Local queue-removal failure and explicit retry
 
-The rationale is proportionate complexity for the owner's personal workflow.
-This is not a request to remove all save journals, tests, or ordinary diagnostics.
+If accepted creation/verification is followed by failed source removal, retain the
+entry and show the actual removal error together with any confirmation warning.
+Do not claim advancement. The browser presents **Retry queue removal** instead
+of another creation action. This manual click is needed only for local removal
+failure; a confirmation-fetch failure alone advances automatically.
+
+The retry uses the completed save's durable source/session/entry association and
+note ID. It performs source removal only: no Anki creation, read-back, flags, or
+sync requests. Reopening the workspace restores this pending-removal view even
+when Anki is unavailable. Repeated legacy create/custom requests for that accepted
+entry also finish removal rather than resubmit content. Existing source-change,
+stale-entry, concurrent-append, and interrupted-removal protections still apply.
+
+### Journal semantics
+
+The existing `word_saves` journal records `submitted` only for a positive creation
+reply. If confirmation is unavailable, it records `acknowledged` with the precise
+`confirmation_warning`, note ID, expected payload, and source association.
+`verified_at` and `observed_json` remain unset: this is not labelled verified and
+does not populate the verified-note index. Successfully checked saves are `verified`.
+The explicit legacy bulk-cleanup command still requires verified saves.
+
+Rationale: proportionate handling of a rare failure in the owner's personal
+workflow, while using the existing journal to prevent duplicate creation on retry.
 
 ## Owner-confirmed tag lifecycle
 

@@ -14,9 +14,11 @@ import type {
   ReviewFilter,
   ReviewItem,
   ReviewSnapshot,
+  SaveResult,
   Session,
   SessionSummary,
   Status,
+  SourceSaveResult,
   Translation,
 } from './types'
 
@@ -32,6 +34,15 @@ function targetConfigured(config: WorkspaceConfig) {
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : 'Something went wrong while talking to the local backend.'
+}
+
+function saveNotice(result: SaveResult, session?: Session, removalOnly = false) {
+  const outcome = result.confirmationWarning || `${result.action === 'updated' ? 'Updated' : 'Created'} note ${result.noteId}${result.audioDownloaded ? ' with audio.' : '.'}`
+  const audio = result.audioDownloaded === false ? `Audio was unavailable: ${result.audioError ?? 'unknown reason'}.` : ''
+  const movement = session && !result.cleanupPending
+    ? `${removalOnly ? 'Queue entry removed. ' : ''}${session.current ? 'Continued to the next word.' : 'The source queue is now empty.'}`
+    : ''
+  return [outcome, audio, result.flagWarning ? `Flag was not changed: ${result.flagWarning}` : '', result.syncWarning ? `Anki sync is pending: ${result.syncWarning}` : '', result.cleanupWarning, movement].filter(Boolean).join(' ')
 }
 
 function formatDate(value?: string | null) {
@@ -510,7 +521,7 @@ function CustomCardForm({
   decks: string[]
   models: string[]
   onClose: () => void
-  onComplete: (result: { action: string; noteId: number; session: Session; syncWarning?: string; cleanupWarning?: string }) => Promise<void>
+  onComplete: (result: SourceSaveResult) => Promise<void>
 }) {
   const [deckName, setDeckName] = useState(initialDeckName)
   const [modelName, setModelName] = useState(initialModelName)
@@ -546,7 +557,7 @@ function CustomCardForm({
     setSaving(true)
     setError(null)
     try {
-      const result = await api.post<{ action: string; noteId: number; session: Session; syncWarning?: string; cleanupWarning?: string }>(
+      const result = await api.post<SourceSaveResult>(
         `/backend/sessions/${sessionId}/current/custom-card`,
         { deckName, modelName, fields, entryId },
       )
@@ -589,6 +600,7 @@ function Workspace({ sessionId, review, onExit }: { sessionId?: string; review?:
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [editingKey, setEditingKey] = useState<string | null>(null)
+  const [pendingRemoval, setPendingRemoval] = useState<SaveResult | null>(null)
   const [suggestionInput, setSuggestionInput] = useState('')
   const [customTag, setCustomTag] = useState('')
   const [removeTags, setRemoveTags] = useState<string[]>([])
@@ -668,6 +680,10 @@ function Workspace({ sessionId, review, onExit }: { sessionId?: string; review?:
         fieldMapping: loaded.fieldMapping ?? {},
       }
       setConfig(nextConfig)
+      if (loaded.pendingRemoval) {
+        await hydrateCurrent(loaded, nextConfig)
+        return
+      }
       await loadConfigurationOptions(nextConfig)
       if (loaded.mode === 'add' && !targetConfigured(nextConfig)) return
       await hydrateCurrent(loaded, nextConfig)
@@ -736,6 +752,8 @@ function Workspace({ sessionId, review, onExit }: { sessionId?: string; review?:
     setGeminiText('')
     setGeminiMode(null)
     setCustomCardOpen(false)
+    setPendingRemoval(nextSession.pendingRemoval ?? null)
+    if (nextSession.pendingRemoval) return
     setRemoveTags(nextSession.mode === 'review' && nextSession.filter.kind === 'tag' && nextSession.filter.value === 'TO_EDIT' ? ['TO_EDIT'] : [])
     setQueuedCardFlag(null)
     setFlag(
@@ -1115,11 +1133,11 @@ function Workspace({ sessionId, review, onExit }: { sessionId?: string; review?:
     setError(null)
     try {
       if (draftTimer.current) window.clearTimeout(draftTimer.current)
-      let result: { action: string; noteId: number; audioDownloaded: boolean; audioError?: string; flagWarning?: string; syncWarning?: string; cleanupWarning?: string; cleanupPending?: boolean }
+      let result: SaveResult
       let nextSession: Session
       if (isReview) {
         const target = effectiveConfig()
-        result = await api.post<{ action: string; noteId: number; audioDownloaded: boolean; audioError?: string; flagWarning?: string; syncWarning?: string; cleanupWarning?: string; cleanupPending?: boolean }>('/backend/review/item/commit', {
+        result = await api.post<SaveResult>('/backend/review/item/commit', {
           noteId: session.current?.noteId,
           cardId: session.current?.cardId,
           draft,
@@ -1141,16 +1159,32 @@ function Workspace({ sessionId, review, onExit }: { sessionId?: string; review?:
         }
       } else {
         await persistDraft(draft, false)
-        const sessionResult = await api.post<{ action: string; noteId: number; audioDownloaded: boolean; audioError?: string; flagWarning?: string; syncWarning?: string; cleanupWarning?: string; session: Session }>(
+        const sessionResult = await api.post<SourceSaveResult>(
           `/backend/sessions/${sessionId}/current/commit`,
           { action: isDuplicate ? 'update' : 'create', removeTags, flag, entryId: draft.entryId },
         )
         result = sessionResult
         nextSession = sessionResult.session
       }
-      setNotice(`${result.action === 'updated' ? 'Updated' : 'Created'} note ${result.noteId}${result.audioDownloaded ? ' with audio.' : `. Audio was unavailable, so noAudio will be tagged: ${result.audioError ?? 'unknown reason'}`}${result.flagWarning ? ` Flag was not changed: ${result.flagWarning}` : ''}${result.syncWarning ? ` Anki sync is pending: ${result.syncWarning}` : ''}${result.cleanupWarning ? ` ${result.cleanupWarning}` : ''}`)
+      setNotice(saveNotice(result, isReview ? undefined : nextSession))
       setSession(nextSession)
       await hydrateCurrent(nextSession, config)
+    } catch (requestError) {
+      setError(errorMessage(requestError))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function retryQueueRemoval() {
+    if (!session?.current || !pendingRemoval) return
+    setSaving(true)
+    setError(null)
+    try {
+      const result = await api.post<SourceSaveResult>(`/backend/sessions/${sessionId}/current/retry-removal`, { entryId: session.current.id })
+      setNotice(saveNotice(result, result.session, true))
+      setSession(result.session)
+      await hydrateCurrent(result.session, config)
     } catch (requestError) {
       setError(errorMessage(requestError))
     } finally {
@@ -1230,7 +1264,7 @@ function Workspace({ sessionId, review, onExit }: { sessionId?: string; review?:
     return <main className="workspace-shell"><header className="topbar"><div className="brand"><span className="brand__mark">AF</span><span>Anki Flashcards Factory</span></div><button className="button button--secondary" type="button" onClick={() => void exitWorkspace()}>Exit to home</button></header><div className="workspace-error"><h1>Source unavailable</h1><p>{error ?? 'The source file could not be loaded.'}</p></div></main>
   }
 
-  if (session.mode === 'add' && !targetConfigured(config)) {
+  if (session.mode === 'add' && !pendingRemoval && !targetConfigured(config)) {
     return <TargetSetup
       sessionId={sessionId as string}
       initialConfig={config}
@@ -1280,6 +1314,14 @@ function Workspace({ sessionId, review, onExit }: { sessionId?: string; review?:
 
       {completed ? (
           <section className="completion-card"><p className="eyebrow">{isReview ? 'REVIEW COMPLETE' : 'SOURCE EMPTY'}</p><h1>Everything here is accounted for.</h1><p>{isReview ? 'Return home to choose another review.' : 'This source has no pending words. Reload after adding vocabulary, or choose another source.'}</p>{notice ? <p className="completion-card__notice">{notice}</p> : null}<button className="button button--primary" type="button" onClick={() => void exitWorkspace()}>Return home</button></section>
+      ) : pendingRemoval ? (
+        <section className="panel completion-card">
+          <p className="eyebrow">QUEUE REMOVAL PENDING</p>
+          <h1>Note {pendingRemoval.noteId} was {pendingRemoval.action === 'updated' ? 'updated' : 'created'} in Anki.</h1>
+          {pendingRemoval.confirmationWarning ? <p role="status">{pendingRemoval.confirmationWarning}</p> : null}
+          <p>{pendingRemoval.cleanupWarning ?? 'Its original source entry is still pending removal. Retry to finish removing that entry.'}</p>
+          <button className="button button--primary" type="button" disabled={saving} onClick={() => void retryQueueRemoval()}>{saving ? 'Retrying queue removal...' : 'Retry queue removal'}</button>
+        </section>
       ) : (
         <>
           <section className="word-banner">
@@ -1343,7 +1385,7 @@ function Workspace({ sessionId, review, onExit }: { sessionId?: string; review?:
             models={models}
             onClose={() => setCustomCardOpen(false)}
             onComplete={async (result) => {
-              setNotice(`Created custom note ${result.noteId}.${result.syncWarning ? ` Anki sync is pending: ${result.syncWarning}` : ''}${result.cleanupWarning ? ` ${result.cleanupWarning}` : ''}`)
+              setNotice(saveNotice(result, result.session))
               setSession(result.session)
               setCustomCardOpen(false)
               await hydrateCurrent(result.session, config)

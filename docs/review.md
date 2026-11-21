@@ -2,6 +2,23 @@
 
 Last updated: 2026-11-21.
 
+## Post-walkthrough S-001 implementation — 2026-11-21
+
+The owner approved the refined creation flow: after a valid creation reply,
+unavailable confirmation requests warn precisely and allow advancement. Warnings
+identify note/profile/card-deck retrieval, the underlying error, and what could
+not be checked; fetched content mismatches and observed profile changes still block.
+Normal and custom creation share the rule; updates and unknown writes retain
+strict confirmation/recovery.
+
+The existing journal distinguishes `submitted`, `acknowledged` (unverified, with
+its warning), and `verified`. Source associations allow **Retry queue removal**
+to finish only local consumption without Anki calls or duplicate creation. The
+pending-removal view survives reopening, and notification wording never claims
+advancement when removal failed. See [Anki completion rules](contracts/anki.md#acknowledged-creation-with-failed-follow-up-confirmation).
+Verification: `python -m tools.check` passed Ruff, Pyright, 156 tests (2 live checks
+skipped), and frontend TypeScript/build. All regression state was temporary/offline.
+
 ## Post-walkthrough headword resolution — 2026-11-21
 
 The owner approved fixing Basel and lead-astray lookup and requested recording the
@@ -45,7 +62,7 @@ The owner separately approved and implemented the file-backed queue refactor:
 
 Current authority: [queue rules](features/vocabulary-queues.md) and
 [ADR 0004](decisions/0004-file-backed-word-queues.md). `Q-002` draft removal remains
-optional; `S-001` confirmation simplification remains pending. The interview batches
+optional; `S-001` was implemented later as recorded above. The interview batches
 below are historical evidence, not a description of today's queue implementation.
 
 Verification: `python -m tools.check` passed on 2026-11-21 (Ruff, Pyright,
@@ -84,7 +101,7 @@ then review root [to-do](../to-do) and [roadmap](roadmap.md). Let the owner choo
 the next task before implementation; do not restart this interview.
 The owner prefers warning-and-continue for acknowledged note creation followed
 by failed follow-up confirmation, rather than blocking on read-back. Recorded as
-`S-001` for separate implementation; the current code is still stricter.
+`S-001`, subsequently implemented in the post-walkthrough update above.
 The test boundary is confirmed: routine tests are offline with fixtures/fake Anki;
 real Anki/Diki checks are explicit integration actions. Current discovery passes
 offline after legacy-test retirement; `T-002` now enforces the standard runner. See

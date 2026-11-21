@@ -141,6 +141,11 @@ def discard_current(session_id: str, request: SourceEntryRequest):
     return service.discard_current(session_id, entry_id=request.entryId)
 
 
+@app.post("/backend/sessions/{session_id}/current/retry-removal")
+def retry_source_removal(session_id: str, request: SourceEntryRequest):
+    return service.retry_source_removal(session_id, entry_id=request.entryId)
+
+
 @app.post("/backend/sessions/{session_id}/current/custom-card")
 def create_custom_card(session_id: str, request: CustomCardRequest):
     return service.create_custom_card(
