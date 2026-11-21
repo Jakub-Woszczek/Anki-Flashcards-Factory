@@ -93,6 +93,11 @@ class TestSourceAPI(TestCase):
             ("POST", f"{base}/queue/diff", {"words": []}),
             ("DELETE", base, None),
             ("DELETE", f"{base}/current/duplicate", None),
+            (
+                "POST",
+                f"{base}/current/duplicate/suspend",
+                {"entryId": self.session["current"]["id"]},
+            ),
             ("POST", f"{base}/current/skip", {}),
         ]:
             with self.subTest(path=path):

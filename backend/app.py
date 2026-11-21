@@ -129,11 +129,6 @@ def existing_note(session_id: str):
     return service.existing_note(session_id)
 
 
-@app.post("/backend/sessions/{session_id}/current/duplicate/suspend")
-def suspend_duplicate_note(session_id: str, request: SourceEntryRequest):
-    return service.suspend_duplicate_note(session_id, entry_id=request.entryId)
-
-
 @app.post("/backend/sessions/{session_id}/current/commit")
 def commit_current(session_id: str, request: CommitRequest):
     return service.commit_current(

@@ -52,12 +52,18 @@ There is no SQLite pending-word/order mirror.
 | Update and continue | Consume the current source entry after verified update | Update existing note in place; preserve current card decks |
 | Discard from queue | Consume the current source entry | No Anki mutation |
 | Create custom card | Consume the current source entry after verified save | Create the configured manual note |
-| Suspend duplicate and continue | Consume the current source entry after successful suspension | Suspend the existing note's cards |
 
 There is no generic skip-for-later action in vocabulary processing. Exit before
 resolving a word to leave it pending. **Discard from queue** also covers deciding
 that an existing Anki note already adequately covers the current word. A separate
 "Keep existing card" action would have the same effect and was removed.
+
+For an existing note, the prominent **Discard card from queue** button invokes
+the same discard action as the lower **Discard from queue** button. Both remain
+visible for convenient access and leave the Anki note, cards, and study availability
+unchanged. The previous suspension action and its backend operation were retired
+at the owner's request. UI labels say **Existing note found** / **Existing Anki
+note**, since matching queued vocabulary does not imply multiple Anki notes.
 
 The owner also retired **Delete duplicate note**: update-in-place is the supported
 overwrite workflow. Queue discard does not delete an Anki note or its cards.

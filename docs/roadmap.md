@@ -27,6 +27,10 @@ editing/deletion, and duplicate Anki-note deletion. Discard is the sole skip-lik
 vocabulary action, including keeping an already adequate existing note unchanged.
 Review saves no longer implicitly consume main-list words.
 
+Owner-approved UX follow-up: removed note suspension and replaced its prominent
+button with **Discard card from queue**, the same action as the lower discard
+button. Existing-note labels replace misleading duplicate-note labels.
+
 Before retiring the local main snapshot, its 25 SQLite-only entries were appended
 to the main file as requested; there were no imported add queues to export.
 The local database was backed up and existing target settings reused.

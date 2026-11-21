@@ -12,6 +12,9 @@ The owner separately approved and implemented the file-backed queue refactor:
 - Discard replaces generic skip and keep-existing; it only removes the current
   source entry and never deletes an Anki note. Duplicate-note deletion was removed;
   existing notes are refreshed in place.
+- In the owner's UX follow-up, suspension was also retired. Its prominent button
+  is now **Discard card from queue**, sharing the lower discard button's handler.
+  User-facing duplicate labels were changed to existing-note wording.
 - Completion consumes the exact original occurrence even after lookup spelling
   changes. Concurrent CLI appends are preserved; entry IDs reject stale requests
   and durable receipts protect interrupted-removal retries. Review saves no longer

@@ -53,6 +53,10 @@ are not determined by this answer. See the
 - Use **Discard from queue** as the sole skip-like vocabulary action. Accepting an
   already-covered word has the same file/Anki effect and needs no keep-existing button.
 - Remove duplicate Anki-note deletion; keep the update-in-place workflow.
+- Retire note suspension as a queue-completion action. The prominent **Discard
+  card from queue** and lower **Discard from queue** controls share the same
+  source-only discard behavior. Use existing-note labels rather than implying
+  that a matching queued word proves duplicate Anki notes exist.
 - Consume only the original current source occurrence, including when dictionary
   lookup changes its spelling. Other occurrences and sources remain pending.
 - Preserve concurrent CLI appends using shared locks/atomic writes. Entry IDs and

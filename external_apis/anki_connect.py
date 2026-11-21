@@ -78,15 +78,6 @@ class AnkiConnect:
             },
         )
 
-    def suspend_note_cards(self, note_id: int):
-        card_ids = self.invoke("findCards", query=f"nid:{note_id}")
-        if self.last_error:
-            return None
-        if not card_ids:
-            self.last_error = f"No cards found for note {note_id}"
-            return None
-        return self.invoke("suspend", cards=card_ids)
-
     def store_media_file(self, filename: str, content: bytes):
         """Store audio in the media folder of Anki's active profile."""
         return self.invoke(

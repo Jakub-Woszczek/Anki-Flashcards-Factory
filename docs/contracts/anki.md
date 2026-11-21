@@ -107,9 +107,12 @@ not establish that this end-to-end feature is complete. See the
 
 ## Existing-note refresh and follow-up tags
 
-Normal word processing can display an existing note, compare fields, update it
-in place, or suspend it. **Discard from queue** removes the pending entry without
-changing the existing note. The redundant keep-existing action and duplicate-note
+Normal word processing can display an existing note, compare fields, or update it
+in place. **Discard from queue** removes the pending entry without
+changing the existing note. The prominent **Discard card from queue** button has
+exactly the same behavior; suspension and its backend operation were removed.
+Finding an existing note does not imply that multiple Anki notes exist, so the UI
+uses existing-note wording. The redundant keep-existing action and duplicate-note
 deletion were retired in Q-001 at the owner's request; overwrite uses in-place
 update rather than deleting/recreating learned cards. Updates
 retain the note ID, lock the English field, and block changing its note type in

@@ -215,34 +215,6 @@ class FactoryService:
     def list_sessions(self):
         return self.sessions.list_sessions()
 
-    @staticmethod
-    def _duplicate_note_id(session: dict[str, Any]) -> int:
-        current = session["current"]
-        draft = session["draft"] or {}
-        note_id = current.get("noteId") or draft.get("existingNoteId")
-        if not isinstance(note_id, int):
-            raise ServiceError("No duplicate Anki note is associated with this word", 404)
-        return note_id
-
-    @source_action
-    def suspend_duplicate_note(self, session_id: str, *, entry_id: str | None = None):
-        session = self.sessions.require_current(session_id, entry_id)
-        if session["mode"] != "add" or not session["current"]:
-            raise ServiceError("This queue item is not available", 409)
-        note_id = self._duplicate_note_id(session)
-        self.anki.suspend_note_cards(note_id)
-        if self.anki.last_error:
-            raise ServiceError(self.anki.last_error, 503)
-        result = {
-            "action": "suspended duplicate",
-            "noteId": note_id,
-            "session": self.sessions.complete_current(
-                session_id, session["current"]["id"], reason="suspended duplicate"
-            ),
-        }
-        result.update(self._sync_after_mutation())
-        return result
-
     def update_session(self, session_id: str, **values):
         try:
             return self.sessions.update_session(session_id, **values)

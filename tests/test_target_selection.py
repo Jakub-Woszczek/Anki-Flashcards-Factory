@@ -1,5 +1,6 @@
 from typing import Any
 from unittest import TestCase
+from unittest.mock import Mock
 
 from backend.services import FactoryService
 from external_apis.diki_resources import NoAudio
@@ -50,16 +51,6 @@ class FakeCustomCardAnki(ReadBackAnki):
     def add_note(self, deck_name, model_name, fields):
         self.call = (deck_name, model_name, fields)
         return 99
-
-    def sync(self):
-        return True
-
-
-class FakeDuplicateActionAnki:
-    last_error = None
-
-    def suspend_note_cards(self, note_id):
-        self.suspended_note_id = note_id
 
     def sync(self):
         return True
@@ -188,20 +179,21 @@ class TestTargetSelection(TestCase):
         self.assertEqual(service.completions.words_path.read_text(), "take\n")
         self.assertEqual(result["noteId"], 99)
 
-    def test_suspending_a_duplicate_note_advances_the_queue(self):
+    def test_discarding_entry_with_existing_note_advances_without_changing_anki(self):
         service: Any = FactoryService.__new__(FactoryService)
         install_completion(self, service)
-        service.anki = FakeDuplicateActionAnki()
+        service.anki = Mock()
         session = install_source(service)
         service.sessions.replace_current_draft(
             session["id"], {"word": "streamline", "existingNoteId": 99}
         )
 
-        result = service.suspend_duplicate_note(session["id"])
+        result = service.discard_current(session["id"], entry_id=session["current"]["id"])
 
-        self.assertEqual(service.anki.suspended_note_id, 99)
-        self.assertEqual(result["session"]["current"]["word"], "take")
-        self.assertEqual(result["action"], "suspended duplicate")
+        self.assertEqual(service.anki.mock_calls, [])
+        self.assertEqual(result["current"]["word"], "take")
+        self.assertEqual(result["remainingCount"], 1)
+        self.assertEqual(service.completions.words_path.read_text(), "take\n")
 
     def test_creating_a_note_flags_every_generated_card(self):
         service: Any = FactoryService.__new__(FactoryService)

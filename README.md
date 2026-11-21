@@ -141,6 +141,9 @@ bez usuwania innych wystapien lub wariantow. Zapis w review nie zmienia list slo
 
 **Discard from queue** usuwa biezacy wpis bez zmiany Anki, takze gdy istniejaca
 notatka juz wystarcza. Nie ma osobnego **Skip** ani **Keep existing card**.
+Widoczny przy istniejacej notatce przycisk **Discard card from queue** wykonuje
+dokladnie te sama operacje co dolny **Discard from queue**. Zastapil zawieszanie
+kart; zaden z tych przyciskow nie zmienia notatki ani dostepnosci kart w nauce.
 Wyjscie przed rozstrzygnieciem slowa pozostawia je w pliku. Usunieto tez
 **Delete duplicate note**; nadpisywanie odbywa sie przez aktualizacje w miejscu.
 
