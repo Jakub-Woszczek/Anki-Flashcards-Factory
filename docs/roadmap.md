@@ -243,8 +243,10 @@ See [multiple genuine headwords](contracts/diki.md#multiple-genuine-headwords).
 ## Specification-to-implementation gaps
 
 Original-source consumption and deliberate discard were implemented in Q-001.
-Remaining details such as dictionary-headword-first matching and import-artifact
-rules are recorded beside their rules in
+Dictionary-headword-first matching and case-preserving resolution were subsequently
+implemented on 2026-11-21 after the Basel/lead-astray investigation; see
+[ADR 0005](decisions/0005-diki-headwords-and-case.md). Remaining import-artifact
+rules and Polish compatibility details are recorded beside their rules in
 [vocabulary queues](features/vocabulary-queues.md#book-content-and-remaining-decisions)
 and the [Diki contract](contracts/diki.md#implementation-evidence-and-gaps).
 They have not been prioritized into an implementation plan during this walkthrough.

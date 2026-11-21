@@ -217,7 +217,12 @@ class WordCompletion:
             raise VerificationError("Anki profile changed; word retained")
         if type(save["note_id"]) is not int or save["note_id"] <= 0:
             raise VerificationError("No confirmed Anki note ID; word retained")
-        note = self.compare(anki, save["note_id"], json.loads(save["expected_json"]))
+        expected = json.loads(save["expected_json"])
+        note = self.compare(anki, save["note_id"], expected)
+        stored_word = (
+            note.get("fields", {}).get(expected.get("englishField"), {}).get("value")
+            or save["word"]
+        )
         if self.profile(anki) != save["profile"]:
             raise VerificationError("Anki profile changed during read-back; word retained")
         # Persist confirmation and the local index together, before touching the list.
@@ -231,7 +236,7 @@ class WordCompletion:
                 """INSERT INTO note_index VALUES (?,?,?)
                 ON CONFLICT(normalized_word) DO UPDATE SET note_id=excluded.note_id,
                 en_word=excluded.en_word""",
-                (save["word"], save["word"], save["note_id"]),
+                (save["word"], stored_word, save["note_id"]),
             )
         return note
 

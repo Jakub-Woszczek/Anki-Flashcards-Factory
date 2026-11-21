@@ -1,4 +1,4 @@
-- lookup for Basel does not works, also 'lead astray'
+- Completed 2026-11-21: Basel/lead-astray lookup fixes. Resolve original-cased Diki headwords before Anki matching; preserve query casing and separate case-distinct meanings/resources. Basel stays Basel; lead astray resolves to lead somebody astray. See docs/decisions/0005-diki-headwords-and-case.md.
 - Queue editing retired 2026-11-21 at the owner's request; maintain the actual vocabulary files or use CLI capture. Upload/paste, queue naming/creation/deletion, and duplicate Anki-note deletion were also removed in Q-001.
 - Q-001 UX follow-up completed 2026-11-21: removed note suspension; the prominent "Discard card from queue" and lower "Discard from queue" buttons now share source-only discard. Replaced misleading visible duplicate-note labels with existing-note wording.
 - Completed 2026-11-19: owner-approved deprecated-code cleanup (L-001/T-001 plus manual index CLI, standalone AnkiUtils, direct-folder audio export, obsolete Anki wrappers, and unused helpers). See docs/roadmap.md#completed-legacy-code-cleanup-2026-11-19.

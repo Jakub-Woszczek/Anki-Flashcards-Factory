@@ -89,9 +89,12 @@ Repeated lines count as separate pending entries and receive separate identities
 as they are reached. Do not stem, automatically equate variants, or scan other
 entries for eager Anki deduplication. The owner evaluates each entry at its turn.
 
-The intended Anki English value remains the relevant Diki headword. This refactor
-fixes raw-to-source consumption; it does not implement a new automatic canonical
-headword resolver or a complete Anki matching policy. See [Diki rules](../contracts/diki.md).
+The Anki English value comes from the relevant, original-cased Diki headword.
+After Q-001, the separately approved 2026-11-21 headword change added exact-case
+preference, unique case-insensitive/unique-entry resolution, and headword-first
+Anki matching. `basel` saves as `Basel`; `lead astray` saves as
+`lead somebody astray`, while consuming the original source line in either case.
+See [Diki rules](../contracts/diki.md) and [ADR 0005](../decisions/0005-diki-headwords-and-case.md).
 
 ## Concurrent capture, stale requests, and recovery
 

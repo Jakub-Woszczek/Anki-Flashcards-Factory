@@ -61,6 +61,12 @@ can be revised after reviewing audit failures. Version 2 added the five allowed
 punctuation characters. Version 3 also allows apostrophes at the beginning of the
 phrase and before hyphens. Spacing rules and the HTML prohibition are unchanged.
 
+The normal vocabulary workflow now obtains the original-cased English identity
+from Diki before creating a note; see [ADR 0005](docs/decisions/0005-diki-headwords-and-case.md).
+That semantic resolution does not change this version 3 syntax parser, its scope,
+or the historical audit checkpoint below. Existing-note refresh still locks its
+English field rather than migrating historical headwords.
+
 ### Result and failure behavior
 
 - Valid: return the original string unchanged; no lowercasing or cleanup.

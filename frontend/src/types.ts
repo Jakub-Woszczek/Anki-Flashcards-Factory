@@ -9,6 +9,8 @@ export type Draft = {
   entryId?: string
   sourceWord?: string
   word?: string
+  resolvedWord?: string | null
+  caseSensitive?: boolean
   groups?: Translation[][]
   tags?: string[]
   flag?: number
@@ -84,6 +86,8 @@ export type LookupResult = {
   entryId?: string
   sourceWord?: string
   word: string
+  resolvedWord?: string | null
+  caseSensitive?: boolean
   exactMatch: boolean
   groups: Translation[][]
   suggestions: string[]

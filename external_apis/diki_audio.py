@@ -6,8 +6,10 @@ from urllib.parse import unquote, urljoin, urlsplit
 
 from bs4 import BeautifulSoup, Tag
 
+from external_apis.diki_entries import select_entries
+
 # Bump when selection rules change, so old negative results are reconsidered.
-DISCOVERY_VERSION = 1
+DISCOVERY_VERSION = 2
 
 
 def _normalize(text):
@@ -46,7 +48,11 @@ def discover_audio_urls(html: str, word: str) -> list[str]:
     phrase = _normalize(word)
     soup = BeautifulSoup(html, "html.parser")
     candidates = []
-    for entity in soup.select(".dictionaryEntity"):
+    selection = select_entries(soup, word, inflections=True)
+    if not selection.entries:
+        selection = select_entries(soup, word, allow_unique=True, inflections=True)
+    phrase = _normalize(selection.word or word)
+    for entity in selection.entries:
         header = entity.find("div", class_="hws")
         if header is None:
             continue
@@ -54,7 +60,10 @@ def discover_audio_urls(html: str, word: str) -> list[str]:
         if phrase not in {_normalize(hw.get_text(" ", strip=True)) for hw in headwords}:
             continue
         for hw in headwords:
-            spelling = _normalize(hw.get_text(" ", strip=True))
+            raw_spelling = " ".join(hw.get_text(" ", strip=True).split())
+            spelling = _normalize(raw_spelling)
+            if selection.case_sensitive and raw_spelling != selection.word:
+                continue
             if spelling.replace(" ", "") != phrase.replace(" ", ""):
                 continue
             for sibling in hw.next_siblings:

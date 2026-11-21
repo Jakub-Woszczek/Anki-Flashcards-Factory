@@ -113,6 +113,12 @@ Serwer Vite przekazuje zadania `/backend` do backendu na porcie `8000`.
 3. Dla kazdego slowa wybierz tlumaczenia z Diki, dodaj tagi i sprawdz podglad.
 4. Utworz nowa notatke, zaktualizuj istniejaca albo wybierz **Discard from queue**.
 
+Angielskie haslo pochodzi z Diki, z zachowaniem wielkosci liter: `basel` →
+`Basel`, `lead astray` → `lead somebody astray`. Dokladna pisownia ma
+pierwszenstwo; `Polish` i `polish` maja oddzielne znaczenia. Niejednoznaczny
+wynik wymaga wyboru podpowiedzi. Dotyczy to tez zapisu slow przez CLI.
+Zasady: [Diki headwords and case](docs/decisions/0005-diki-headwords-and-case.md).
+
 Plik jest kolejka: kolejnosc i pozostale slowa sa odczytywane bezposrednio z niego.
 SQLite przechowuje ustawienia celu, szkic biezacego wpisu i historie operacji,
 bez drugiej kopii listy slow. Dodawaj slowa przez CLI lub edytuj pliki tekstowe.
@@ -212,7 +218,10 @@ python -m tools.diki_prefetch --words-dir words_to_add/books
 
 Dodanie nowego pliku `.txt` do folderu list wystarcza, aby nastepna partia go
 uwzglednila. Format: jedno slowo lub fraza w linii, UTF-8. Puste linie sa
-pomijane, wielkosc liter i nadmiarowe spacje nie tworza nowych zasobow. Listy nie
+pomijane, nadmiarowe spacje nie tworza nowych zasobow. Wielkosc liter jest
+zachowywana w zadaniach i kluczach cache, aby nie mieszac `Polish`/`polish`.
+Bezpieczne aliasy korzystaja z istniejacych lokalnych danych bez odswiezania.
+Listy nie
 sa modyfikowane przez downloader. Wgranie pliku tylko przez przegladarke nie
 kopiuje go automatycznie do tego folderu.
 
@@ -222,6 +231,9 @@ ponownie wykorzystywane). Cookies nie sa eksportowane ani zapisywane na dysku.
 Nagrania sa wybierane z linkow w zapisanym HTML: najpierw dokladne haslo,
 potem wariant rozniacy sie tylko spacjami (np. `eyepatch` → `eye patch`).
 Dla kazdej pisowni preferowane jest nagranie brytyjskie, potem amerykanskie.
+Nagranie musi nalezec do rozstrzygnietego hasla Diki. Nowe pliki mediow Anki dla
+hasel z wielkimi literami maja deterministyczny sufiks skrotu, aby uniknac kolizji
+nazw `Polish`/`polish` na macOS; zapis `en_word` pozostaje oryginalnym haslem.
 Nie wybieramy innych synonimow ani nagran przykladowych zdan i nie zgadujemy
 nazw plikow. Brak linku oznacza brak dostepnego nagrania, bez szesciu prob HTTP.
 Stare wpisy `no_audio` sa automatycznie sprawdzane nowa metoda z lokalnego HTML.

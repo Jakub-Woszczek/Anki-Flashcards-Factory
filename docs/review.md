@@ -2,6 +2,25 @@
 
 Last updated: 2026-11-21.
 
+## Post-walkthrough headword resolution — 2026-11-21
+
+The owner approved fixing Basel and lead-astray lookup and requested recording the
+decision. Manual live Diki comparisons established equal content for Basel/basel
+and Lead Astray/lead astray, but case-dependent entry ordering for Polish/polish
+and Turkey/turkey. The owner chose exact-case headword preference, unique
+case-insensitive fallback, and suggestions for remaining ambiguity.
+
+Browser/CLI lookup now returns the actual original-cased headword before Anki
+matching; one unambiguous returned entry resolves aliases such as lead astray.
+Case-distinct meanings, resources, capture, and audio are separated. Existing
+lowercase cache paths remain; safe aliases support offline canonical saves.
+See [ADR 0005](decisions/0005-diki-headwords-and-case.md) and
+[Diki rules](contracts/diki.md#resolution-and-case--accepted-2026-11-21).
+Source occurrence rules, refresh's English-field lock, and `en_word` version 3
+remain in force. No live Anki collection operation was used for this change.
+Verification: `python -m tools.check` passed Ruff, Pyright, 145 tests (2 live
+checks skipped), and frontend TypeScript/build. See [development](development.md).
+
 ## Post-walkthrough Q-001 implementation — 2026-11-21
 
 The owner separately approved and implemented the file-backed queue refactor:

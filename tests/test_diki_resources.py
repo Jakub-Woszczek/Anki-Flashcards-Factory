@@ -109,7 +109,7 @@ class TestDikiResources(TestCase):
         )
         self.get.return_value = response(content)
         resources = self.resources()
-        self.assertTrue(DikiApi(resources).lookup("take")[0])
+        self.assertTrue(DikiApi(resources).lookup("take").translations)
         self.assertEqual(resources.metadata("take", "html")["state"], "ready")
         self.assertEqual(resources.setting("cooldown_until", 0), 0)
 
@@ -332,8 +332,8 @@ class TestDikiResources(TestCase):
     def test_word_lists_deduplicate_prioritize_and_report_local_coverage(self):
         folder = self.root / "lists"
         (folder / "books").mkdir(parents=True)
-        (folder / "words_to_add.txt").write_text(" TAKE \ntake\n\n tkae\n", encoding="utf-8")
-        (folder / "books" / "book.txt").write_text("Take\n", encoding="utf-8")
+        (folder / "words_to_add.txt").write_text(" take \ntake\n\n tkae\n", encoding="utf-8")
+        (folder / "books" / "book.txt").write_text("take\n", encoding="utf-8")
         (folder / "broken.txt").write_bytes(b"\xff\xfe")
         (folder / "outside.txt").symlink_to(self.root / "outside.txt")
         (self.root / "outside.txt").write_text("secret", encoding="utf-8")
@@ -343,7 +343,9 @@ class TestDikiResources(TestCase):
         self.assertEqual(len(lists), 3)
         resources = self.resources()
         resources._save("take", "html", HTML, 200, "fixture", True)
-        resources._save("take", "audio", MP3, 200, "fixture")
+        resources._save(
+            "take", "audio", MP3, 200, "https://www.diki.pl/images-common/en/mp3/take.mp3"
+        )
         resources._save("tkae", "html", SUGGESTIONS, 404, "fixture")
         result = coverage(resources, lists)
         main, book, broken = result["lists"]
@@ -363,7 +365,9 @@ class TestDikiResources(TestCase):
 
         resources = self.resources(offline=True)
         resources._save("take", "html", HTML, 200, "fixture", True)
-        resources._save("take", "audio", MP3, 200, "fixture")
+        resources._save(
+            "take", "audio", MP3, 200, "https://www.diki.pl/images-common/en/mp3/take.mp3"
+        )
         service = FactoryService.__new__(FactoryService)
         install_completion(self, service)
         service.diki = DikiApi(resources)

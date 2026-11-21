@@ -1,3 +1,4 @@
+import hashlib
 import html
 import json
 import re
@@ -123,14 +124,14 @@ class FactoryService:
     @staticmethod
     def _normalize_anki_field_value(value: str) -> str:
         text = re.sub(r"<[^>]+>", " ", html.unescape(value))
-        return " ".join(text.replace("\xa0", " ").split()).lower()
+        return " ".join(text.replace("\xa0", " ").split())
 
     @staticmethod
     def _draft_word(draft: dict[str, Any], current: dict[str, Any]) -> str:
-        word = draft.get("word") or current.get("word")
+        word = draft.get("resolvedWord") or draft.get("word") or current.get("word")
         if not isinstance(word, str) or not word.strip():
             raise ServiceError("The current word is missing")
-        return " ".join(word.split()).lower()
+        return " ".join(word.split())
 
     @staticmethod
     def _selected_translation_groups(draft: dict[str, Any]) -> list[list[str]]:
@@ -171,18 +172,15 @@ class FactoryService:
     @staticmethod
     def _audio_filename(word: str) -> str:
         safe_word = re.sub(r'[<>:"/\\|?*\0]', "", word)
+        # Anki media on the owner's Mac can be case-insensitive (Polish/polish).
+        if word != word.lower():
+            safe_word += "-" + hashlib.sha256(word.encode()).hexdigest()[:12]
         return f"{safe_word}.mp3"
 
-    def _find_existing_note_id(self, word: str, session: dict[str, Any]) -> int | None:
+    def _find_existing_note_id(
+        self, word: str, session: dict[str, Any], *, case_sensitive: bool = False
+    ) -> int | None:
         indexed_note_id = self.notes.get_note_id(word)
-        if indexed_note_id:
-            note = self.anki.get_note(indexed_note_id)
-            if note:
-                return indexed_note_id
-            if self.anki.last_error:
-                # Keep an index hit usable when Anki is temporarily unavailable.
-                return indexed_note_id
-
         mapping = session.get("fieldMapping", {})
         english_field = mapping.get("englishField")
         if not isinstance(english_field, str) or not english_field:
@@ -192,15 +190,27 @@ class FactoryService:
         if self.anki.last_error:
             return None
         normalized_word = self._normalize_word(word)
+        if isinstance(indexed_note_id, int) and indexed_note_id not in candidate_ids:
+            candidate_ids = [*candidate_ids, indexed_note_id]
+        matches = []
         for note in self.anki.notes_info(candidate_ids):
             field = note.get("fields", {}).get(english_field, {})
-            if self._normalize_anki_field_value(field.get("value", "")) != normalized_word:
+            value = self._normalize_anki_field_value(field.get("value", ""))
+            if self._normalize_word(value) != normalized_word:
                 continue
-            note_id = note.get("noteId")
-            if isinstance(note_id, int) and not self.notes.is_in_db(word):
-                self.notes.add_word(note_id, word)
-            return note_id if isinstance(note_id, int) else None
-        return None
+            matches.append((value, note))
+        exact = [note for value, note in matches if value == word]
+        candidates = exact or (
+            [note for _, note in matches]
+            if not case_sensitive and len({value for value, _ in matches}) == 1
+            else []
+        )
+        if not candidates:
+            return None
+        note_id = candidates[0].get("noteId")
+        if isinstance(note_id, int) and not self.notes.is_in_db(word):
+            self.notes.add_word(note_id, word)
+        return note_id if isinstance(note_id, int) else None
 
     def session(self, session_id: str):
         try:
@@ -239,17 +249,24 @@ class FactoryService:
         raw_word = current.get("word") or requested_word
         if not raw_word:
             raise ServiceError("Provide the English word to refresh Diki translations")
-        word = self._normalize_word(requested_word or raw_word)
-        existing_note_id = current.get("noteId") or self._find_existing_note_id(word, session)
+        query = " ".join((requested_word or raw_word).split())
         try:
-            translations, suggestions = self.diki.lookup(word)
+            result = self.diki.lookup(query)
         except ResourceError as error:
             raise ServiceError(str(error), 503) from error
+        word = result.word or query
+        existing_note_id = current.get("noteId") or (
+            self._find_existing_note_id(word, session, case_sensitive=result.case_sensitive)
+            if result.word
+            else None
+        )
         draft = {
             "entryId": current["id"],
             "sourceWord": raw_word,
             "word": word,
-            "groups": self._translation_groups(translations),
+            "resolvedWord": result.word,
+            "caseSensitive": result.case_sensitive,
+            "groups": self._translation_groups(result.translations),
             "tags": [],
             "existingNoteId": existing_note_id,
         }
@@ -258,9 +275,11 @@ class FactoryService:
             "entryId": current["id"],
             "sourceWord": raw_word,
             "word": word,
-            "exactMatch": bool(translations),
+            "resolvedWord": result.word,
+            "caseSensitive": result.case_sensitive,
+            "exactMatch": bool(result.meanings),
             "groups": draft["groups"],
-            "suggestions": suggestions,
+            "suggestions": result.suggestions,
             "existingNoteId": existing_note_id,
         }
 
@@ -277,6 +296,10 @@ class FactoryService:
             "entryId": session["current"]["id"],
             "sourceWord": session["current"]["word"],
         }
+        previous = session.get("draft") or {}
+        if previous.get("resolvedWord"):
+            for key in ("word", "resolvedWord", "caseSensitive", "existingNoteId"):
+                draft[key] = previous.get(key)
         return self.sessions.replace_current_draft(session_id, draft, session["current"]["id"])
 
     @staticmethod
@@ -430,6 +453,7 @@ class FactoryService:
         flag: int | None,
         card_id: int | None,
         source_entry: dict[str, Any] | None = None,
+        case_sensitive: bool = False,
     ) -> dict[str, Any]:
         english_field = target["fieldMapping"].get("englishField")
         if (
@@ -482,6 +506,7 @@ class FactoryService:
                     flag,
                     card_id,
                     source_entry,
+                    case_sensitive,
                 )
         except (VerificationError, OSError, sqlite3.Error) as error:
             raise ServiceError(f"Save not confirmed; word retained. {error}", 503) from error
@@ -503,8 +528,10 @@ class FactoryService:
         flag,
         card_id,
         source_entry,
+        case_sensitive=False,
     ):
         audio_downloaded = self._write_audio(word)
+        english_field = target["fieldMapping"].get("englishField")
         audio_field = target["fieldMapping"].get("audioField")
         if not audio_downloaded:
             if audio_field:
@@ -524,6 +551,7 @@ class FactoryService:
             expected = {
                 "deckName": target["deckName"],
                 "modelName": target["modelName"],
+                "englishField": english_field,
                 "fields": fields,
                 "tags": tags,
             }
@@ -558,16 +586,20 @@ class FactoryService:
                 name: value["value"] for name, value in existing.get("fields", {}).items()
             }
             expected_fields.update(update_fields)
-            if (
-                english_field
-                and self._normalize_anki_field_value(expected_fields.get(english_field, "")) != word
-            ):
+            existing_word = self._normalize_anki_field_value(expected_fields.get(english_field, ""))
+            matches_word = (
+                existing_word == word
+                if case_sensitive
+                else self._normalize_word(existing_word) == self._normalize_word(word)
+            )
+            if english_field and not matches_word:
                 raise ServiceError(
                     "The existing note contains a different English word; word retained", 409
                 )
             expected = {
                 "cardDecks": card_decks,
                 "modelName": target["modelName"],
+                "englishField": english_field,
                 "fields": expected_fields,
                 "tags": tags,
                 "removeTags": sorted(set(remove_tags) - set(tags)),
@@ -652,9 +684,7 @@ class FactoryService:
         tags = [
             tag.strip() for tag in draft.get("tags", []) if isinstance(tag, str) and tag.strip()
         ]
-        existing_note_id = (
-            current.get("noteId") or draft.get("existingNoteId") or self.notes.get_note_id(word)
-        )
+        existing_note_id = current.get("noteId") or draft.get("existingNoteId")
 
         result = self._perform_commit(
             target,
@@ -667,6 +697,7 @@ class FactoryService:
             flag,
             current.get("cardId"),
             {"sessionId": session_id, "entryId": current["id"], "source": session["source"]},
+            bool(draft.get("caseSensitive")),
         )
         return self._complete_source(session, result)
 
@@ -867,18 +898,26 @@ class FactoryService:
         return {"items": items, "filter": {"kind": kind, "value": value, "deckName": deck_name}}
 
     def review_item_lookup(self, word: str, field_mapping: dict[str, Any]):
-        normalized = self._normalize_word(word)
+        query = " ".join(word.split())
         pseudo_session = {"fieldMapping": field_mapping}
-        existing_note_id = self._find_existing_note_id(normalized, pseudo_session)
         try:
-            translations, suggestions = self.diki.lookup(normalized)
+            result = self.diki.lookup(query)
         except ResourceError as error:
             raise ServiceError(str(error), 503) from error
+        existing_note_id = (
+            self._find_existing_note_id(
+                result.word, pseudo_session, case_sensitive=result.case_sensitive
+            )
+            if result.word
+            else None
+        )
         return {
-            "word": normalized,
-            "exactMatch": bool(translations),
-            "groups": self._translation_groups(translations),
-            "suggestions": suggestions,
+            "word": result.word or query,
+            "resolvedWord": result.word,
+            "caseSensitive": result.case_sensitive,
+            "exactMatch": bool(result.meanings),
+            "groups": self._translation_groups(result.translations),
+            "suggestions": result.suggestions,
             "existingNoteId": existing_note_id,
         }
 
@@ -969,7 +1008,16 @@ class FactoryService:
         tags = [
             tag.strip() for tag in draft.get("tags", []) if isinstance(tag, str) and tag.strip()
         ]
-        existing_note_id = note_id or draft.get("existingNoteId") or self.notes.get_note_id(word)
+        existing_note_id = note_id or draft.get("existingNoteId")
         return self._perform_commit(
-            target, fields, tags, remove_tags, action, existing_note_id, word, flag, card_id
+            target,
+            fields,
+            tags,
+            remove_tags,
+            action,
+            existing_note_id,
+            word,
+            flag,
+            card_id,
+            case_sensitive=bool(draft.get("caseSensitive")),
         )

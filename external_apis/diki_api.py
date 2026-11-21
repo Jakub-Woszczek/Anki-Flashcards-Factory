@@ -1,7 +1,9 @@
+from dataclasses import dataclass
 from typing import TypedDict, cast
 
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 
+from external_apis.diki_entries import select_entries
 from external_apis.diki_resources import DikiResources, ResourceError
 
 
@@ -13,6 +15,28 @@ class SentenceExample(TypedDict):
 class Meaning(TypedDict):
     translations: list[str]
     examples: list[SentenceExample]
+
+
+@dataclass
+class DikiLookup:
+    word: str | None
+    meanings: list[Meaning]
+    suggestions: list[str]
+    case_sensitive: bool = False
+
+    @property
+    def translations(self) -> list[list[str]]:
+        return [meaning["translations"] for meaning in self.meanings]
+
+
+def resolve_lookup(html: str, phrase: str) -> DikiLookup:
+    selection = select_entries(BeautifulSoup(html, "html.parser"), phrase, allow_unique=True)
+    return DikiLookup(
+        selection.word,
+        _entry_meanings(selection.entries),
+        selection.suggestions,
+        selection.case_sensitive,
+    )
 
 
 class DikiApi:
@@ -54,11 +78,10 @@ class DikiApi:
 
         return phrases
 
-    def lookup(self, phrase) -> tuple[list[list[str]], list[str]]:
+    def lookup(self, phrase) -> DikiLookup:
         """One resource read, with per-call failures instead of shared error state."""
         html = self.resources.fetch_html(phrase)
-        translations = parse_translations(html, phrase)
-        return translations, [] if translations else sorted(self._spellings_from_html(html))
+        return resolve_lookup(html, phrase)
 
     def similar_phrases(self, soup):
         """
@@ -141,30 +164,14 @@ def parse_translations(html: str, phrase: str) -> list[list[str]]:
 
 def parse_meanings(html: str, phrase: str) -> list[Meaning]:
     """Parse meanings and attached bilingual examples without performing I/O."""
-    normalized_phrase = " ".join(phrase.lower().split())
     soup = BeautifulSoup(html, "html.parser")
+    return _entry_meanings(select_entries(soup, phrase).entries)
 
-    entities = soup.find_all("div", class_="dictionaryEntity")
+
+def _entry_meanings(entities: list[Tag]) -> list[Meaning]:
     all_meanings = []
 
     for entity in entities:
-        header_section = entity.find("div", class_="hws")
-        if not header_section:
-            continue
-
-        # Słowa kluczowe z nagłówka (może być ich kilka np. dla staunch i stanch)
-        # Uwaga: niektóre hasła zawierają zagnieżdżone <span class="stopword">
-        # (np. "whatever floats <span class="stopword">one's</span> boat"),
-        # więc trzeba wymusić separator, inaczej słowa się sklejają
-        # (np. "whatever floatsone'sboat").
-        header_words = [
-            " ".join(hw.get_text(separator=" ", strip=True).split()).lower()
-            for hw in header_section.find_all("span", class_="hw")
-        ]
-
-        if normalized_phrase not in header_words:
-            continue
-
         meanings_list = entity.find_all(
             "ol", class_="foreignToNativeMeanings"
         )  # Szukam wszystkich znaczeń

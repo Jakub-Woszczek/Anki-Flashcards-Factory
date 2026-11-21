@@ -407,7 +407,11 @@ class TestWordCompletion(TestCase):
     def test_source_save_consumes_original_form_and_preserves_other_occurrences(self):
         self.words.write_bytes(b"causes\ncause\ncauses\n")
         session = self.source_session()
-        self.service.diki.lookup.return_value = ([["przyczyna"]], [])
+        from external_apis.diki_api import DikiLookup
+
+        self.service.diki.lookup.return_value = DikiLookup(
+            "cause", [{"translations": ["przyczyna"], "examples": []}], []
+        )
         lookup = self.service.lookup_current(
             session["id"], "cause", entry_id=session["current"]["id"]
         )
@@ -426,8 +430,10 @@ class TestWordCompletion(TestCase):
         session = self.source_session()
 
         def lookup(_word):
+            from external_apis.diki_api import DikiLookup
+
             self.words.write_bytes(b"replacement\nlast\n")
-            return [["brać"]], []
+            return DikiLookup("take", [{"translations": ["brać"], "examples": []}], [])
 
         self.service.diki.lookup.side_effect = lookup
         with self.assertRaises(ServiceError) as error:
@@ -592,4 +598,4 @@ class TestWordCompletion(TestCase):
             self.assertFalse(thread.is_alive())
         self.assertTrue(appended.is_set())
         self.assertTrue(self.words.read_bytes().endswith(b"last\nnew word\n"))
-        self.assertFalse(append_word(self.words, "NEW   WORD"))
+        self.assertFalse(append_word(self.words, "new   word"))

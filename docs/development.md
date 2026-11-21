@@ -43,6 +43,17 @@ stale API requests, edits during lookup/audio preparation, legacy migration, and
 restart at removal/SQLite boundaries. API checks use in-process ASGI with temporary
 stores and fake integrations. No live Anki/Diki requests were used for this change.
 
+The later 2026-11-21 headword-resolution full check also passed: Ruff lint/format
+(44 Python files), Pyright with zero errors/warnings, 145 tests run (143 passed,
+2 opt-in live checks skipped), and frontend TypeScript/production build. Thirteen
+new regression methods cover Basel/lead-astray resolution, case-distinct entries,
+ambiguity, CLI capture, cache identity/provenance, offline alias audio, old prefetch
+metadata, Anki/index candidates, source-draft identity, and exact-entry completion.
+Tests use temporary stores and fake integrations. The owner-requested manual live
+Diki comparisons preceded implementation and are recorded separately in
+[ADR 0005](decisions/0005-diki-headwords-and-case.md); no live Anki operation or
+dictionary fixture refresh was performed for verification.
+
 Local hooks check changed Python files with Ruff, then run project-wide Pyright
 and guarded tests for Python changes. Frontend changes trigger its type-check/build.
 Activate the development environment before committing. GitHub Actions runs the

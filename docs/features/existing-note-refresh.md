@@ -51,6 +51,9 @@ removing edits/custom additions but has not made that decision; the UI stays as 
   fields. **Update and continue** updates it in place; **Discard from queue**
   consumes an already-covered pending entry while leaving Anki unchanged.
   Duplicate-note deletion/recreation was retired in Q-001.
+- Diki headword resolution now precedes Anki matching, with exact-case preference
+  and case-distinct candidate validation. See [ADR 0005](../decisions/0005-diki-headwords-and-case.md).
+  This does not remove the existing English-field lock or rewrite historical casing.
 - `backend/services.py` constructs translation HTML from selected draft values
   and writes updates against the existing note ID. The normal update path locks
   the English field and rejects note-type changes.

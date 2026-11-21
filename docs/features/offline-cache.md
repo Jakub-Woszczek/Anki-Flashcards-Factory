@@ -1,6 +1,6 @@
 # Diki cache and background preparation
 
-Last updated: 2026-11-19.
+Last updated: 2026-11-21.
 
 Specification status: two purposes, bounded queue-buffer priority, and rolling
 snapshot retention confirmed. Exact buffer configuration/book selection and the
@@ -92,6 +92,23 @@ configuration were not settled. Intake examples explain the rationale; they are
 not limits imposed on the owner.
 
 ## Source policy: keep the accumulated snapshot
+
+### Query casing and resolved-headword reuse
+
+As of 2026-11-21, request and cache keys preserve casing: `Polish` and `polish`
+must not overwrite each other's resources. Lowercase cache paths remain valid.
+An unambiguous non-case-distinct lowercase snapshot can seed a capitalized key
+without a network request. Resolved aliases seed missing canonical-headword
+HTML/audio so a prepared `lead astray` can be saved as `lead somebody astray`
+offline. Existing canonical snapshots are retained.
+
+Audio reuse checks the stored source URL against recordings advertised for the
+selected headword. Old negative audio discovery is reconsidered under version 2;
+old no-exact-match HTML is reinterpreted locally for prefetch/readiness. Download
+planning preserves case-distinct list entries. See
+[ADR 0005](../decisions/0005-diki-headwords-and-case.md).
+
+### Retention
 
 Downloaded successful resources should be retained and reused. Routine expiry,
 periodic replacement, or re-downloading existing content for each check has no

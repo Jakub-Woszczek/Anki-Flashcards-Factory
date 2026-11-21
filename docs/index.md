@@ -32,6 +32,7 @@ distinguish confirmed requirements, current behavior, open decisions, and gaps.
 - [ADR 0002: Per-entry vocabulary resolution](decisions/0002-per-entry-vocabulary-resolution.md)
 - [ADR 0003: Retain a rolling Diki snapshot](decisions/0003-rolling-diki-snapshot.md)
 - [ADR 0004: Source files are the word queues](decisions/0004-file-backed-word-queues.md)
+- [ADR 0005: Diki headwords and meaningful case](decisions/0005-diki-headwords-and-case.md)
 - [Roadmap and deferred discussions](roadmap.md): future ideas and open decisions.
 - [Root to-do list](../to-do): recorded changes for a separate implementation session.
 - [Development-history baseline](review.md#repository-evidence-baseline): recent steps and commit evidence.

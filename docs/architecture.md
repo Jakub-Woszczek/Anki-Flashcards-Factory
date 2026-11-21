@@ -108,7 +108,9 @@ rare failure with a blocking recovery flow.
 
 - `Q-001` is implemented: source files own queues; exact original entries are consumed
   independently of lookup spelling, with append-safe writes and stale-request checks.
-- Initial duplicate lookup precedes Diki resolution, while intended identity follows the dictionary headword.
+- Headword-first lookup is implemented: Diki returns the original-cased identity,
+  then Anki/index candidates are checked against it. Case-distinct dictionary
+  meanings/resources remain separate; see [ADR 0005](decisions/0005-diki-headwords-and-case.md).
 - Custom/edited Polish text remains possible; selection-only is a tentative decision.
 - Prefetch discovers text lists, without the intended bounded-buffer-to-existing-note preparation tier.
 - Failed follow-up confirmation currently blocks acknowledged-create completion; intended behavior is warning-and-continue (`S-001`).

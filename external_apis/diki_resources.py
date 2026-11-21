@@ -33,7 +33,8 @@ MAX_PACING_MULTIPLIER = 16
 
 
 def normalize_word(word: str) -> str:
-    word = " ".join(word.lower().split())
+    # Query identity is case-preserving: Polish/polish can select different entries.
+    word = " ".join(word.split())
     if not word or len(word) > 500 or "\0" in word:
         raise ValueError("Provide a nonempty word or phrase of at most 500 characters")
     return word
@@ -600,8 +601,22 @@ class DikiResources:
         word = normalize_word(phrase)
         if not refresh:
             cached = self._cached(word, kind)
-            if cached is not None:
+            if cached is not None and (kind == "html" or self._audio_matches(word)):
+                if kind == "html":
+                    from external_apis.diki_api import resolve_lookup
+
+                    exact = bool(
+                        resolve_lookup(cached.decode("utf-8", errors="replace"), word).meanings
+                    )
+                    with self.db() as db:
+                        db.execute(
+                            "UPDATE resources SET exact_match=? WHERE word=? AND kind='html'",
+                            (int(exact), word),
+                        )
                 return cached
+            legacy = self._reuse_legacy(word, kind)
+            if legacy is not None:
+                return legacy
             row = self.metadata(word, kind)
             if row and row["state"] == "no_audio":
                 raise NoAudio(f"Diki has no downloadable audio for {phrase}")
@@ -625,7 +640,7 @@ class DikiResources:
         ):
             if not refresh:
                 cached = self._cached(word, kind)
-                if cached is not None:
+                if cached is not None and (kind == "html" or self._audio_matches(word)):
                     return cached
             row = self.metadata(word, kind) or {}
             if not refresh and row.get("state") == "no_audio":
@@ -649,12 +664,49 @@ class DikiResources:
                 raise
 
     def _download_html(self, word):
-        from external_apis.diki_api import parse_meanings
+        from external_apis.diki_api import resolve_lookup
 
         url = "https://www.diki.pl/slownik-angielskiego?" + urlencode({"q": word})
         status, content = self._request(url, "html")
         text = content.decode("utf-8", errors="replace")
-        self._save(word, "html", content, status, url, bool(parse_meanings(text, word)))
+        self._save(word, "html", content, status, url, bool(resolve_lookup(text, word).meanings))
+        return content
+
+    def _audio_matches(self, word):
+        """Old lowercase caches may contain a recording from the other homograph."""
+        content = self._cached(word, "html")
+        if content is None:
+            return False
+        row = self.metadata(word, "audio") or {}
+        return row.get("source") in discover_audio_urls(
+            content.decode("utf-8", errors="replace"), word
+        )
+
+    def _reuse_legacy(self, word, kind):
+        from external_apis.diki_api import resolve_lookup
+
+        legacy = word.lower()
+        if legacy == word:
+            return None
+        content = self._cached(legacy, "html")
+        if content is None:
+            return None
+        result = resolve_lookup(content.decode("utf-8", errors="replace"), word)
+        if not result.meanings or result.case_sensitive:
+            return None
+        if kind == "audio":
+            row = self.metadata(legacy, "audio") or {}
+            if row.get("source") not in discover_audio_urls(
+                content.decode("utf-8", errors="replace"), word
+            ):
+                return None
+            content = self._cached(legacy, "audio")
+            if content is None:
+                return None
+        row = self.metadata(legacy, kind)
+        if row is None:
+            return None
+        self._save(word, kind, content, row["status"], row["source"], bool(result.meanings))
         return content
 
     def _audio_plan(self, word, html):
@@ -729,7 +781,28 @@ class DikiResources:
         raise NoAudio(f"Diki has no downloadable audio for {word}")
 
     def fetch_html(self, word, *, refresh=False) -> str:
-        return self._fetch(word, "html", refresh).decode("utf-8", errors="replace")
+        from external_apis.diki_api import resolve_lookup
+
+        word = normalize_word(word)
+        content = self._fetch(word, "html", refresh)
+        text = content.decode("utf-8", errors="replace")
+        result = resolve_lookup(text, word)
+        # A queued alias and its resolved headword must both work offline. Keep
+        # existing independent snapshots; only fill missing canonical resources.
+        if result.word and result.meanings and result.word != word:
+            if self._cached(result.word, "html") is None:
+                row = self.metadata(word, "html")
+                if row:
+                    self._save(result.word, "html", content, row["status"], row["source"], True)
+            audio = self._cached(word, "audio")
+            row = self.metadata(word, "audio") or {}
+            if (
+                audio is not None
+                and self._cached(result.word, "audio") is None
+                and row.get("source") in discover_audio_urls(text, result.word)
+            ):
+                self._save(result.word, "audio", audio, row["status"], row["source"])
+        return text
 
     def fetch_audio(self, word, *, refresh=False) -> bytes:
         return self._fetch(word, "audio", refresh)
@@ -757,6 +830,7 @@ class DikiResources:
                 html_digests.get(row["word"]),
             )
             if row["digest"]:
+                content = b""
                 try:
                     content = self.path(row["word"], row["kind"]).read_bytes()
                     valid = (
@@ -767,5 +841,18 @@ class DikiResources:
                     valid = False
                 if not valid:
                     row["state"] = "missing"
+                elif row["kind"] == "html" and not row["exact_match"]:
+                    from external_apis.diki_api import resolve_lookup
+
+                    row["exact_match"] = int(
+                        bool(
+                            resolve_lookup(
+                                content.decode("utf-8", errors="replace"), row["word"]
+                            ).meanings
+                        )
+                    )
             result[(row["word"], row["kind"])] = row
+        for (word, kind), row in result.items():
+            if kind == "audio" and row["state"] == "ready" and not self._audio_matches(word):
+                row["state"] = "pending"
         return result

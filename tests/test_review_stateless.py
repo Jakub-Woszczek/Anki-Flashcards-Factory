@@ -2,6 +2,7 @@ from typing import Any
 from unittest import TestCase
 
 from backend.services import FactoryService, ServiceError
+from external_apis.diki_api import DikiLookup
 from external_apis.diki_resources import NoAudio
 from tests.completion_helpers import ReadBackAnki, install_completion
 
@@ -38,7 +39,9 @@ class FakeDiki:
     last_error = None
 
     def lookup(self, _word):
-        return [["pierwszy", "drugi"]], []
+        return DikiLookup(
+            "streamline", [{"translations": ["pierwszy", "drugi"], "examples": []}], []
+        )
 
     def get_translations(self, _word):
         return [["pierwszy", "drugi"]]

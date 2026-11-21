@@ -45,8 +45,8 @@ def append_word(path: Path, word: str) -> bool:
     path = path.resolve()
     with list_lock(path):
         content = path.read_bytes() if path.exists() else b""
-        words = {normalize_word(line) for line in content.decode("utf-8-sig").splitlines()}
-        if normalize_word(word) in words:
+        words = {" ".join(line.split()) for line in content.decode("utf-8-sig").splitlines()}
+        if " ".join(word.split()) in words:
             return False
         separator = b"" if not content or content.endswith((b"\n", b"\r")) else b"\n"
         atomic_write(path, content + separator + word.encode("utf-8") + b"\n")

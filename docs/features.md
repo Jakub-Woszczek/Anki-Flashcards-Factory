@@ -8,7 +8,7 @@ tested. Specification status and implementation status are separate.
 
 | Capability | Purpose / owner intent | Implementation and specification state |
 | --- | --- | --- |
-| Dictionary CLI and capture | Resolve the Diki English entry, show usage examples, and append chosen vocabulary | Present; captured English words are Diki-compatible input. Source: `tools/diki_lookup.py` |
+| Dictionary CLI and capture | Resolve the Diki English entry, show usage examples, and append chosen vocabulary | Present; browser/CLI now preserve resolved headword casing and distinguish case-specific meanings. [ADR 0005](decisions/0005-diki-headwords-and-case.md). Source: `tools/diki_lookup.py` |
 | Word intake and processing | Consume main/book files as pending queues | `Q-001` implemented: discover/open live files, consume exact current occurrences, preserve concurrent capture and recover interrupted removals. Upload/paste, queue editing/creation/deletion retired. [Rules](features/vocabulary-queues.md) |
 | Translation curation | Choose a diverse, useful set of Diki translation strings | Present; human selection confirmed. Editing/custom additions present, possible selection-only direction not final. [Diki contract](contracts/diki.md) |
 | Anki target selection | Select deck, note type, and field mapping for creation | Present; default type and historical deck context confirmed. [Anki contract](contracts/anki.md) |

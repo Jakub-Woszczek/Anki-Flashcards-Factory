@@ -11,12 +11,14 @@ are outside the current review focus. Cache/snapshot policy, dialect-neutral aud
 and the current CLI-only role of examples are recorded. Detailed fetching/layout
 rules and remaining workflow expectations are still being reviewed.
 
-Implementation status: existing lookup and selection functionality is present;
-the full compatibility goal is not established as enforced or achieved.
+Implementation status: original-cased English headword resolution is implemented
+for browser/CLI processing (2026-11-21). Full Polish compatibility and historical
+collection compatibility are not established as enforced or achieved.
 
-Verification status: source inspection and an owner-provided page excerpt, with
-the missing-note structure subsequently inspected in live Anki. No live Diki
-request, compatibility audit, or new parser test was performed in this discussion.
+Verification status: the original walkthrough used source inspection, an
+owner-provided excerpt, and read-only Anki structure inspection. The later
+Basel/lead-astray investigation explicitly compared live Diki query casing and
+added offline regressions. No collection compatibility audit was performed.
 
 ## Diki compatibility
 
@@ -53,6 +55,22 @@ displayed English headword in dictionary content.
 
 A successful lookup URL or a section title repeating the search term is not, by
 itself, proof that the term is an entry headword.
+
+### Resolution and case — accepted 2026-11-21
+
+Preserve query casing. Prefer an exact-case genuine headword, then a unique
+case-insensitive headword spelling. If no headword matches but the response has
+one full dictionary entry, use its first headword. Thus `basel` → `Basel` and
+`lead astray` → `lead somebody astray`. Multiple unmatched entries or ambiguous
+case-only spellings require suggestion selection.
+
+`Polish`/`polish` and `Turkey`/`turkey` have different meanings: select only the
+matching entry's meanings/audio. Never merge them through lowercase comparison.
+The resolved, original-cased headword flows into drafts, previews, new Anki notes,
+and CLI capture. Anki matching follows resolution and validates case-distinct
+identity even though standard Latin-character searches are case-insensitive.
+See [ADR 0005](../decisions/0005-diki-headwords-and-case.md) for evidence, cache
+compatibility, and matching rules. Existing refresh still locks the English field.
 
 ### Resolution belongs to capture or current-word processing
 
@@ -102,7 +120,8 @@ requested or performed in this interview batch.
 The existing [`en_word` version 3 contract](../../note-data-contracts.md) validates
 stored syntax; it does not establish dictionary membership or Diki compatibility.
 The compatibility goal does not silently change that parser, its allow-list, or
-its version. Exact casing/spacing comparisons are not yet specified here.
+its version. Headword casing is now specified above; broader stored-field
+normalization/encoding questions remain separate.
 
 ### Multiple genuine headwords
 
@@ -271,20 +290,19 @@ confirmed goals, observed mechanics, and existing-note coverage gap.
 
 ## Implementation evidence and gaps
 
-- [`external_apis/diki_api.py`](../../external_apis/diki_api.py), `lookup`, returns
-  translation groups or suggestions, without a separate resolved-headword field.
-- `parse_meanings` accepts entities whose header contains the normalized requested
-  phrase. It does not independently resolve every inflection to a different
-  headword. A query such as the owner's `causes` example can require selecting and
-  looking up the appropriate suggestion under current behavior.
-- [`backend/services.py`](../../backend/services.py), `lookup_current`, checks Anki
-  using the submitted word before fetching Diki, and stores `sourceWord` and `word`
-  in the draft. This is not yet an explicit dictionary-headword-first identity
-  contract throughout the pipeline.
+- [`external_apis/diki_api.py`](../../external_apis/diki_api.py), `lookup`, now returns
+  a resolved headword, meanings, suggestions, and case-distinct matching metadata.
+  Shared entry selection is in `external_apis/diki_entries.py`. The lower-level
+  `parse_meanings`/`get_meanings` helpers retain exact-headword extraction while
+  respecting case-distinct entries; browser/CLI lookup adds unique-entry resolution.
+- [`backend/services.py`](../../backend/services.py), `lookup_current`, resolves
+  Diki first, then checks Anki. Drafts distinguish original `sourceWord` from
+  `resolvedWord`; preview and save preserve the resolved spelling. Legacy drafts
+  without that identity are looked up again by the browser on reopening.
 - Q-001 now identifies and consumes the original current source occurrence,
   independently of the selected lookup/saved spelling. Saving `cause` can therefore
   consume original `causes` without removing another queued `cause`. This fixes
-  source bookkeeping, not the broader headword-first lookup/matching gap above.
+  source bookkeeping; the later ADR 0005 change also implements headword-first matching.
 - A generic custom-card path exists, but no reviewed rule guarantees routing
   genuinely missing words to the owner's specific missing deck and note type.
 - Deterministic serialization of current draft values exists, but does not alone

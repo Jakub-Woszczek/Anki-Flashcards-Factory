@@ -760,7 +760,7 @@ function Workspace({ sessionId, review, onExit }: { sessionId?: string; review?:
           existingNoteId: nextSession.draft.existingNoteId,
         })
         if (nextSession.draft.existingNoteId) await loadExistingNote(false)
-        if (!nextSession.draft.groups?.length) await lookupCurrent(nextSession.draft.word)
+        if (!nextSession.draft.resolvedWord || !nextSession.draft.groups?.length) await lookupCurrent(nextSession.draft.sourceWord ?? nextSession.draft.word)
       } else {
         await lookupCurrent()
       }
@@ -826,6 +826,8 @@ function Workspace({ sessionId, review, onExit }: { sessionId?: string; review?:
         entryId: result.entryId,
         sourceWord: result.sourceWord ?? result.word,
         word: result.word,
+        resolvedWord: result.resolvedWord,
+        caseSensitive: result.caseSensitive,
         groups: result.groups,
         tags: session?.mode === 'review' ? draft?.tags ?? existing?.tags ?? [] : [],
         existingNoteId: result.existingNoteId,

@@ -17,7 +17,7 @@ from rich.text import Text
 
 from backend.word_list import append_word
 from external_apis.diki_api import DikiApi
-from external_apis.diki_resources import ROOT, DikiResources, DikiTimeout
+from external_apis.diki_resources import ROOT, DikiResources, DikiTimeout, ResourceError
 
 WORDS_FILE = os.path.join(os.path.dirname(__file__), "..", "words_to_add", "words_to_add.txt")
 
@@ -83,13 +83,13 @@ def display_meanings(word, meanings):
 def load_existing_words():
     try:
         with open(WORDS_FILE) as f:
-            return {line.strip().lower() for line in f if line.strip()}
+            return {" ".join(line.split()) for line in f if line.strip()}
     except FileNotFoundError:
         return set()
 
 
 def ask_save(word):
-    if word.lower() in load_existing_words():
+    if word in load_existing_words():
         console.print(f"[yellow]'{word}' is already in words_to_add.txt[/yellow]")
         return
     try:
@@ -125,33 +125,27 @@ def main():
         console.print("[red]Usage:[/red] diki <word>")
         sys.exit(1)
 
-    phrase = " ".join(sys.argv[1:]).strip().lower()
+    phrase = " ".join(sys.argv[1:]).strip()
     load_dotenv(ROOT / ".env")
     with DikiResources(profile="interactive") as resources:
         return run_lookup(DikiApi(resources), phrase)
 
 
 def run_lookup(api, phrase):
-    meanings = lookup_meanings(api, phrase)
-    if api.last_error:
-        console.print(f"[red]{api.last_error}[/red]")
+    try:
+        with console.status(f"Fetching '{phrase}'…"), lookup_timeout():
+            result = api.lookup(phrase)
+    except ResourceError as error:
+        console.print(f"[red]{error}[/red]")
         sys.exit(1)
 
-    if meanings:
-        display_meanings(phrase, meanings)
-        ask_save(phrase)
+    if result.meanings:
+        display_meanings(result.word, result.meanings)
+        ask_save(result.word)
         return
 
     # No exact match — look for similar words
-    spellings: set[str] = set()
-    try:
-        with lookup_timeout():
-            spellings = api.possible_spellings(phrase)
-    except DikiTimeout as error:
-        api.last_error = str(error)
-    if api.last_error:
-        console.print(f"[red]{api.last_error}[/red]")
-        sys.exit(1)
+    spellings = set(result.suggestions)
     spellings.discard(phrase)
 
     if not spellings:
