@@ -60,7 +60,7 @@ resolution belongs to dictionary CLI capture or the browser's current-word proce
 The manual `main.py --db` maintenance CLI, standalone Anki inspection helpers,
 direct-folder audio export, and unused fixed-model/deck-moving wrappers were also
 retired. Active browser index operations and cached audio upload remain. See the
-[cleanup record](roadmap.md#completed-legacy-code-cleanup-2026-11-19).
+[cleanup record](features/maintenance-and-tooling.md#legacy-code-cleanup-and-obsolete-tests-t-001).
 
 ## State ownership
 
@@ -120,5 +120,5 @@ consumption without calling Anki, including after a restart.
 - The standard checks, hooks, and CI enforce the offline test boundary through `tools.test_offline` (`T-002`). See [development](development.md).
 
 See the [feature map](features.md), [contracts](index.md#rules-and-reference),
-[roadmap](roadmap.md), and [to-do list](../to-do). Current walkthrough work records
-these gaps; implementation happens separately.
+[roadmap](roadmap.md), and [loose thoughts](todo.md). Pending thoughts are not
+implementation plans; scope is clarified when the owner chooses work.

@@ -1,6 +1,21 @@
 # Project handbook walkthrough — checkpoint
 
-Last updated: 2026-11-21.
+Last updated: 2026-11-22.
+
+## Documentation organization update — 2026-11-22
+
+The owner requested separating loose thoughts from implemented work. The former
+root `to-do` was removed. [docs/todo.md](todo.md) now holds only pending informal
+ideas and reminders, not specifications, confirmed diagnoses, priorities,
+implementation plans, or authorization to implement. Clarify scope when the
+owner chooses an item.
+
+Completed work is recorded in the relevant feature documentation and linked from
+[the feature map](features.md); cleanup/tooling records moved out of the roadmap
+to [their feature page](features/maintenance-and-tooling.md). The roadmap retains
+future-work context. `AGENTS.md` and the handbook index establish this maintenance
+rule. Historical mentions of the root `to-do` below describe the old location;
+they are not instructions to recreate it or treat pending thoughts as accepted tasks.
 
 ## Post-walkthrough S-001 implementation — 2026-11-21
 
@@ -77,7 +92,7 @@ were removed, along with their entry points and tests (`L-001`/`T-001`). The exp
 approval also retired manual index-maintenance commands and scan helpers,
 `AnkiUtils`, direct-folder audio export and its tests, unused Anki creation/deck-moving
 wrappers, and dead helpers/attributes. Active browser index operations remain.
-See the [cleanup record](roadmap.md#completed-legacy-code-cleanup-2026-11-19).
+See the [cleanup record](features/maintenance-and-tooling.md#legacy-code-cleanup-and-obsolete-tests-t-001).
 
 Full unittest discovery ran 107 tests with no failures and 2 opt-in live Diki tests
 skipped under a temporary socket-connection guard. The subsequent repository cleanup
@@ -97,7 +112,7 @@ They should not have to explain this documentation effort again in a new session
 **Walkthrough status:** baseline complete. The owner will choose the next work
 priority in a new session; no priority decision is required to close this review.
 Start future sessions at [the handbook index](index.md), read the relevant rules,
-then review root [to-do](../to-do) and [roadmap](roadmap.md). Let the owner choose
+then review [loose thoughts](todo.md) and [roadmap](roadmap.md). Let the owner choose
 the next task before implementation; do not restart this interview.
 The owner prefers warning-and-continue for acknowledged note creation followed
 by failed follow-up confirmation, rather than blocking on read-back. Recorded as
@@ -120,7 +135,8 @@ Unfinished-word draft recovery is optional convenience; reselecting translations
 is acceptable. Possible removal is recorded as optional `Q-002`, not a firm
 requirement. Do not keep drilling into low-value persistence conveniences.
 **Documentation-only instruction:** from batch 15 onward, record behavior-change
-requests in the root [to-do](../to-do) for separate implementation. Wording such as
+requests in the then-root `to-do` for separate implementation (now
+[loose thoughts](todo.md)). Wording such as
 "change this" during this walkthrough is not permission to alter application code.
 The word source file itself is the authoritative queue; `Q-001` implemented removal
 of the duplicated SQLite queue on 2026-11-21. See
@@ -263,7 +279,8 @@ not automatically make it a question, requirement, or prioritized fix.
 
 **Record changes; do not implement them during this walkthrough.** In batch 15 the
 owner explicitly directed that statements requesting changes should become items
-in the root `to-do` list, with implementation in a separate session. This supersedes
+in the then-root `to-do` list, with implementation in a separate session. The
+current pending-thought location is [todo.md](todo.md). This supersedes
 the earlier practice of implementing a scoped correction during the interview.
 Continue editing handbook/checkpoint/todo files only. The deck-preservation fix
 and its code-only commit `60cdb9f` predate this instruction and remain historical
@@ -288,10 +305,10 @@ the intended structure, not files that already all exist.
 | `docs/contracts/diki.md` | Observed source structure and agreed interpretation/fetching rules |
 | `docs/contracts/anki.md` | Anki concepts, integration, targeting, media, and save/update rules |
 | `note-data-contracts.md` | Existing authority for agreed stored-field content contracts |
-| `docs/features/*.md` | Detailed behavior and acceptance scenarios where useful |
+| `docs/features/*.md` | Implemented behavior, acceptance scenarios, completed milestones, and separately identified data operations |
 | `docs/decisions/*.md` | Significant decisions with status, context, rationale, and consequences |
-| `docs/history.md` | Completed software milestones and separately identified data operations |
-| `docs/roadmap.md` | Prioritized future work and unresolved decisions |
+| `docs/todo.md` | Pending loose thoughts; not specifications, priorities, or implementation plans |
+| `docs/roadmap.md` | Future-work context and unresolved decisions; not a delivery schedule |
 | `docs/review.md` | This effort's purpose, coverage, current checkpoint, and next questions |
 | `AGENTS.md` | Short coding-agent entry point and handbook maintenance instructions |
 
@@ -373,8 +390,9 @@ committed milestones. Recheck their state before drawing conclusions.
 - [Browser migration plan](../MIGRATION.md): design and rationale, partly superseded.
 - [Offline plan](../plan.md) and [research](../research.md): implementation and
   investigation history; not a current general roadmap.
-- [to-do](../to-do): unstructured backlog, including queue editing that now has
-  implementation and tests.
+- The former root `to-do` mixed pending thoughts and completed work. Its pending
+  entries now live in [todo.md](todo.md); completed work is linked from
+  [the feature map](features.md).
 
 Known discussion points, not newly agreed requirements:
 
@@ -683,7 +701,8 @@ Recorded in [Diki contract](contracts/diki.md), [Anki contract](contracts/anki.m
 ## Answers captured: authoritative file queue and documentation-only rule, batch 15
 
 - The owner explicitly directed that future behavior-change requests in this
-  walkthrough be added to `to-do` and implemented separately, not acted on here.
+  walkthrough be added to the then-root `to-do` and implemented separately, not
+  acted on here. Pending thoughts now live in [todo.md](todo.md).
 - The word file itself is the queue. The duplicated SQLite queue is unnecessary
   state that introduces synchronization problems and does not match the intended
   model. Remove/refine that logic in a later implementation session.
@@ -693,7 +712,8 @@ Recorded in [Diki contract](contracts/diki.md), [Anki contract](contracts/anki.m
   more precise one. Draft recovery was unanswered at that point; batch 16 below
   records the subsequent clarification.
 
-Recorded task `Q-001` in root [to-do](../to-do), with details in
+Recorded `Q-001` in the former root `to-do`; its completed implementation is now
+documented in [vocabulary queues](features/vocabulary-queues.md), with details in
 [ADR 0004](decisions/0004-file-backed-word-queues.md),
 [vocabulary queue rules](features/vocabulary-queues.md), [project.md](project.md),
 and [roadmap](roadmap.md). No application code or data was changed.
@@ -710,7 +730,7 @@ and [roadmap](roadmap.md). No application code or data was changed.
 - This concerns per-word UI state, not the Diki source cache, source queue data,
   or durable Anki-save recovery. Do not collapse those distinct purposes.
 
-Added optional `Q-002` to root [to-do](../to-do), and updated
+Added optional `Q-002` to the former root `to-do` (now [todo.md](todo.md)), and updated
 [queue rules](features/vocabulary-queues.md), [roadmap](roadmap.md),
 [project.md](project.md), and [ADR 0004](decisions/0004-file-backed-word-queues.md).
 No application code or state was changed.
@@ -757,7 +777,9 @@ and [architecture](architecture.md). No flags or other application state changed
 Recorded in [feature map](features.md), [queue rules](features/vocabulary-queues.md),
 [Diki contract](contracts/diki.md), [project.md](project.md), and
 [architecture](architecture.md). Added retirement-review task `L-001` to root
-[to-do](../to-do), with context in [roadmap](roadmap.md). No legacy code/data was removed.
+`to-do`; the later retirement is documented in
+[maintenance and tooling](features/maintenance-and-tooling.md). No legacy code/data
+was removed during this interview batch.
 
 ## Answers captured: obsolete initial live tests, batch 20
 
@@ -766,8 +788,9 @@ Recorded in [feature map](features.md), [queue rules](features/vocabulary-queues
 - Scope: `TestAnkiConnect.test_add_flashcard`,
   `TestAnkiConnect.test_move_note_to_deck`, and
   `TestRawNotesEditor.test_diki_possible_spellings`.
-- Recorded deletion as `T-001` in root [to-do](../to-do), with details in
-  [roadmap](roadmap.md). No methods were removed during the walkthrough, consistent
+- Recorded deletion as `T-001` in the former root `to-do`; the later retirement is
+  documented in [maintenance and tooling](features/maintenance-and-tooling.md).
+  No methods were removed during the walkthrough, consistent
   with the batch-15 rule to implement requested changes separately.
 - This does not decide the fate of the two read-only Anki tests or establish a
   blanket policy for all live integration checks.
@@ -813,7 +836,8 @@ Follow-up provenance lookup requested by the owner:
 - Real Anki/Diki checks are explicitly invoked integration checks. Separate
   collection audits can read real notes and cached HTML intentionally.
 - This records a rule; the remaining live-test separation is not implemented
-  during the walkthrough. Added `T-002` to root [to-do](../to-do).
+  during the walkthrough. Added `T-002` to the former root `to-do`; the later
+  implementation is documented in [maintenance and tooling](features/maintenance-and-tooling.md).
 
 Recorded in new [development.md](development.md), [roadmap](roadmap.md),
 [architecture](architecture.md), and handbook navigation. No tests/code were changed
@@ -831,7 +855,8 @@ or executed for this policy capture.
 - The answer does not request removing all operation storage or decide every
   unknown-write/failure case. Do not expand the edge-case discussion further.
 
-Added `S-001` to root [to-do](../to-do), with rules in
+Added `S-001` to the former root `to-do`; its later implementation is linked from
+[the feature map](features.md), with rules in
 [Anki contract](contracts/anki.md), [queue rules](features/vocabulary-queues.md),
 [feature map](features.md), [architecture](architecture.md), and [roadmap](roadmap.md).
 No application code was changed.
@@ -846,7 +871,8 @@ future work, not prerequisites for concluding this walkthrough.
 Next-session reading order:
 
 1. `docs/index.md` and `docs/project.md` for the handbook and goals.
-2. Root `to-do` and `docs/roadmap.md` for accepted tasks versus deferred ideas.
+2. `docs/todo.md` for loose thoughts and `docs/roadmap.md` for future-work context;
+   neither is an implementation plan or authorization to implement.
 3. Relevant contract, feature, and ADR pages before working on a chosen task.
 4. This checkpoint for clarification/history when needed.
 

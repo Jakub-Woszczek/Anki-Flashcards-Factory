@@ -1,6 +1,6 @@
 # Feature map and specification coverage
 
-Last updated: 2026-11-21.
+Last updated: 2026-11-22.
 
 This is a living capability inventory. "Present" means observed in code or live
 Anki where noted, not that every path meets its intended contract or was freshly
@@ -22,15 +22,29 @@ tested. Specification status and implementation status are separate.
 | Image candidate marking | Mark words that might later suit image cards | Present as `IMAGE`; partial evaluation coverage. Full authoring/migration is deferred |
 | Per-word draft recovery | Convenience when leaving before completing one word | Present but rarely useful; redoing selections is acceptable. Optional simplification `Q-002` |
 | Older raw/prepared-file preprocessing | Formerly prepare whole Diki-compatible English lists before note creation | Retired 2026-11-19 (`L-001`): code, CLI option, tests, and vocabulary directories removed. Per-word browser/CLI resolution remains |
+| Maintenance and quality tooling | Retire obsolete paths and keep local checks repeatable and offline | Completed legacy cleanup (`L-001`/`T-001`), guarded runner (`T-002`), repository hygiene, hooks, and macOS CI. [Details](features/maintenance-and-tooling.md) |
 
 ## Deferred features and open decisions
 
 The [roadmap](roadmap.md) records broader old-note cleanup, image-note workflows,
 sentences on notes, newer definition/LLM ideas, and the tentative selection-only
 translation direction. They are not automatically accepted implementation tasks.
-Concrete requested changes are in [to-do](../to-do).
+The owner's loose thoughts are in [todo.md](todo.md); they are not specifications,
+priorities, implementation plans, or authorization to implement.
 
 ## Completed development and evidence
+
+Completed items leave the todo list and are documented with the relevant feature.
+Contracts and ADRs retain ownership of detailed rules and decisions.
+
+| Completed | Change | Documentation |
+| --- | --- | --- |
+| 2026-11-19 | Retired whole-list preprocessing (`L-001`), obsolete live tests (`T-001`), and other approved legacy paths | [Maintenance and retired workflows](features/maintenance-and-tooling.md) |
+| 2026-11-19 | Enforced offline checks (`T-002`) and added repository quality tooling | [Tooling feature](features/maintenance-and-tooling.md#enforced-offline-test-boundary-t-002), [verification guide](development.md) |
+| 2026-11-21 | Live source queues (`Q-001`), source-only discard, and existing-note UX simplification | [Vocabulary queues](features/vocabulary-queues.md) |
+| 2026-11-21 | Fixed Basel/lead-astray resolution and preserved meaningful casing | [Diki contract](contracts/diki.md#resolution-and-case--accepted-2026-11-21), [ADR 0005](decisions/0005-diki-headwords-and-case.md) |
+| 2026-11-21 | Continued after acknowledged creation with unavailable confirmation (`S-001`), with local-only queue-removal retry | [Save completion](contracts/anki.md#acknowledged-creation-with-failed-follow-up-confirmation), [queue workflow](features/vocabulary-queues.md#save-confirmation) |
+| 2026-11-22 | Separated loose todo thoughts from completed feature records and established documentation ownership rules | [Handbook organization](features/maintenance-and-tooling.md#handbook-and-todo-organization) |
 
 On 2026-11-21, `Q-001` replaced SQLite word snapshots with live source queues.
 Discard replaces skip/keep-existing; duplicate-note deletion was retired in favor
@@ -43,7 +57,7 @@ SQLite migration, examples, offline prefetch, fetching isolation, incremental
 contracts, verified source cleanup, and the deck-preservation correction.
 
 Historical data operations are identified separately from software features.
-The [2026-11-19 cleanup](roadmap.md#completed-legacy-code-cleanup-2026-11-19)
+The [2026-11-19 cleanup](features/maintenance-and-tooling.md#legacy-code-cleanup-and-obsolete-tests-t-001)
 also retired manual index-maintenance commands, standalone inspection helpers,
 direct-folder audio export, unused Anki wrappers, and their obsolete tests.
 Existing code and past plans remain evidence rather than automatic approval of

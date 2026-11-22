@@ -82,7 +82,7 @@ The browser's per-word lookup and spelling choices supersede the old whole-list
 raw/prepared preprocessing workflow, which was removed on 2026-11-19. Vet the current
 word as it is processed; no separate pre-vetted full list is required by the owner.
 See [vocabulary source rules](../features/vocabulary-queues.md) and completed
-retirement `L-001` in [to-do](../../to-do).
+retirement `L-001` in [maintenance and retired workflows](../features/maintenance-and-tooling.md#whole-list-preprocessing-retired-l-001).
 
 ### Confirmed example: `causes` → `cause`
 

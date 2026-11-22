@@ -6,6 +6,8 @@ pozwala wznawiac przerwane sesje.
 
 Dokumentacja projektu: [Project handbook](docs/index.md).
 Punkt wznowienia przegladu: [Walkthrough checkpoint](docs/review.md).
+Luzne pomysly i przypomnienia: [Todo](docs/todo.md) — nie sa planem implementacji.
+Zrealizowane zmiany: [Feature map](docs/features.md).
 
 ## Wymagania
 
@@ -358,7 +360,7 @@ Preprocessing `raw_notes/` / `prepared_notes/`, raw editor i opcja `--app -e`
 zostaly usuniete. Usunieto tez reczna obsluge indeksu przez `main.py --db`
 oraz eksport MP3 bezposrednio do folderu mediow. Audio trafia do aktywnego profilu
 Anki przez AnkiConnect; `ANKI_MEDIA_FOLDER_PATH` i `ANKI_BASE_DECK_PATH` nie sa
-juz uzywane. Szczegoly: [zakonczone wycofanie starszych sciezek](docs/roadmap.md#completed-legacy-code-cleanup-2026-11-19).
+juz uzywane. Szczegoly: [zakonczone wycofanie starszych sciezek](docs/features/maintenance-and-tooling.md#legacy-code-cleanup-and-obsolete-tests-t-001).
 
 Starszy indeks JSON ustawiony przez `DATABASE_PATH` jest jednokrotnie
 importowany do SQLite przy pierwszym uruchomieniu.

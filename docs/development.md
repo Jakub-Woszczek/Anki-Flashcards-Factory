@@ -171,7 +171,8 @@ from desired feature contracts.
 
 ## Working during the handbook walkthrough
 
-Read [the checkpoint](review.md) before continuing the interview. Record requested
-behavior changes in [to-do](../to-do); implementation happens separately. Tests,
+Read [the checkpoint](review.md) before continuing the interview. Record pending
+thoughts in [todo.md](todo.md); these are not implementation plans or authorization.
+Completed changes belong in the relevant feature documentation. Tests,
 application code, and collection data are not changed just because a new intended
 rule has been documented.

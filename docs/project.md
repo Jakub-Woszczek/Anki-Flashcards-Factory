@@ -137,7 +137,7 @@ CLI capture resolves the Diki English entry before appending, so those captured
 words are Diki-compatible input. Older manual/book input can still need the main
 app's per-word spelling/entry resolution. The former separate whole-list
 raw/prepared preprocessing path was retired on 2026-11-19; see
-[the retirement record](roadmap.md#deprecated-workflow-whole-list-word-preprocessing-l-001).
+[the retirement record](features/maintenance-and-tooling.md#whole-list-preprocessing-retired-l-001).
 
 The file itself is the authoritative queue. `Q-001` implemented direct file-backed
 processing and removed the duplicated SQLite pending-word snapshot. The homepage

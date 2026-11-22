@@ -3,6 +3,14 @@
 - Start with `docs/index.md`, then the contracts and feature pages relevant to the
   task. They distinguish intended behavior from implementation and historical plans.
 - If a behavior decision is missing or ambiguous, ask the owner before changing it.
+- Keep the owner's pending loose thoughts in `docs/todo.md`. Entries are not
+  specifications, confirmed diagnoses, priorities, implementation plans, or
+  authorization to implement; clarify scope when the owner chooses an item.
+- Document implemented behavior and completed work in the relevant
+  `docs/features/` page and link it from `docs/features.md`; then remove the pending
+  thought from `docs/todo.md`. Contracts/ADRs own detailed rules and decisions;
+  `docs/roadmap.md` provides future-work context. Do not recreate a root todo list
+  or mix completed-work records into the pending list.
 - This is a personal, local Mac workbench. Preserve existing launch commands,
   resource paths, Anki field contracts, and collection state during cleanup work.
 - Run `python -m tools.check` after code changes. It checks Ruff lint/formatting,

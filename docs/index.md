@@ -25,6 +25,7 @@ distinguish confirmed requirements, current behavior, open decisions, and gaps.
 - [Marked-note review](features/marked-note-review.md)
 - [Offline cache and preparation](features/offline-cache.md)
 - [LLM assistance](features/llm-assistance.md)
+- [Maintenance, retired workflows, and quality tooling](features/maintenance-and-tooling.md)
 
 ## Decisions and future work
 
@@ -34,7 +35,7 @@ distinguish confirmed requirements, current behavior, open decisions, and gaps.
 - [ADR 0004: Source files are the word queues](decisions/0004-file-backed-word-queues.md)
 - [ADR 0005: Diki headwords and meaningful case](decisions/0005-diki-headwords-and-case.md)
 - [Roadmap and deferred discussions](roadmap.md): future ideas and open decisions.
-- [Root to-do list](../to-do): recorded changes for a separate implementation session.
+- [Loose thoughts and possible work](todo.md): the owner's pending ideas and reminders, not implementation plans.
 - [Development-history baseline](review.md#repository-evidence-baseline): recent steps and commit evidence.
 
 ## Which document owns a rule?
@@ -45,7 +46,17 @@ rationale. The field-contract document owns agreed parser/audit rules; a broader
 compatibility goal does not silently change those parsers.
 
 The checkpoint owns interview progress, not a competing copy of feature rules.
-The roadmap explains future work; concrete change requests go into `to-do`.
+The roadmap provides broader future-work context. `docs/todo.md` holds only the
+owner's pending loose thoughts; entries are not specifications, confirmed
+diagnoses, priorities, implementation plans, or authorization to implement. List
+order does not imply priority. Clarify scope when the owner chooses an item.
+
+Implemented behavior and completed work belong in the relevant `docs/features/`
+page, linked from `docs/features.md`. When a thought is completed, update that
+documentation and remove it from `docs/todo.md`; do not maintain a second root
+todo list or a completed section in the pending list. Contracts and ADRs retain
+their authority over detailed rules and decisions.
+
 Earlier `MIGRATION.md`, `plan.md`, and `research.md` provide historical context and
 may describe superseded behavior. Raise conflicts rather than treating old plans
 or current code as automatic approval of requirements.
