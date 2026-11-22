@@ -111,3 +111,17 @@ current-entry key resets editing state when moving to another queue entry.
 Verification: `python -m tools.check` passed Ruff lint/format, Pyright with zero
 errors/warnings, 156 tests (2 opt-in live checks skipped), and frontend
 TypeScript/production build. No live Anki/Diki checks were run.
+
+## Retired standalone files
+
+Completed 2026-11-22 at the owner's request:
+
+- Removed root `test_words` from Git. Its three words (`sufficient`, `take`,
+  `sleep in`) were input for the old functional-test launcher added in `bd9fda5`.
+  That launch path was retired by browser migration `6437e8c`; no current
+  source/documentation reference to the input file was found.
+- Removed `tools/Templatka zdęc.xcf` from Git. It was a 1000 × 1000 RGB GIMP
+  template added in `5b9c77c`, with no identified runtime references.
+
+Both files were already absent from the working tree; this cleanup records their
+deletion in version control. Historical versions remain in Git history.
