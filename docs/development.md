@@ -8,6 +8,42 @@ The standard check/test commands, hooks, and CI now enforce network isolation (`
 
 ## Project-local quality tooling
 
+The 2026-11-22 Northflank downloader restoration passed the full check: Ruff
+lint/format (58 Python files), Pyright with zero errors/warnings, 251 tests
+(245 passed, 6 skipped), and frontend TypeScript/Vite build. The skipped tests
+are two opt-in live integrations and four explicit loopback HTTP checks. Those
+four loopback tests also passed separately with `RUN_LOOPBACK_TESTS=1`.
+The guarded runner forces that flag off; its boundary regression covers inherited
+opt-in settings. Remote queue/transfer tests use in-process HTTP adapters,
+temporary caches, fake upstream requests, and fake-transport SIGKILL subprocesses.
+Additional port regressions cover case-distinct jobs, canonical alias reuse and
+server cleanup, current recognized non-entry pages, and stale alias metadata.
+No live Diki or Anki request was made. Container build/runtime and cloud deployment
+remain unverified; deployment is separate future work, outside the restoration
+request. See [remote preparation](features/remote-downloads.md).
+
+The 2026-11-22 selected-entry alternative matching check passed Ruff lint/format
+(50 Python files), Pyright with zero errors/warnings, 188 tests (186 passed,
+2 opt-in live checks skipped), and frontend TypeScript/Vite build. Fourteen new
+offline regressions cover the source-derived anesthetic/anaesthetic entry,
+headword ordering, per-alternative casing, stale index validation, in-place refresh
+and preserved English/decks/audio, exact source consumption, index consistency,
+legacy-draft preservation, late-existing-note protection, stateless review,
+client-tampering rejection, and interrupted-update recovery. All integrations were
+fake and mutable state temporary. The retained personal HTML was inspected only
+for case provenance; no live Diki/Anki call or collection audit was performed.
+See [ADR 0008](decisions/0008-diki-entry-alternatives-and-existing-notes.md).
+
+The 2026-11-22 Diki result-recognition check passed Ruff lint/format (49 Python
+files), Pyright with zero errors/warnings, 174 tests (172 passed, 2 opt-in live
+checks skipped), and frontend TypeScript/Vite build. Eleven new regression methods
+cover the owner's four page types, mixed directions/collocations, first genuine
+alternatives, related-row selection, word-by-word precedence, unknown diagnostics,
+explicit challenges, cached headword choice, and source-preserving backend flow.
+Read-only local corpus inspection separately classified all 1,045 retained HTML
+files and the four supplied downloads; no live Diki/Anki request was made. See
+[Diki result recognition](features/diki-results.md).
+
 Activate the project's environment, then install `requirements-dev.txt` and run
 `python -m pre_commit install` once per checkout. Tool versions are pinned there;
 `pyproject.toml` owns lint/format and Pyright rules, so diagnostics are reproducible

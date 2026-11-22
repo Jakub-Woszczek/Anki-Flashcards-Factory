@@ -125,3 +125,52 @@ Completed 2026-11-22 at the owner's request:
 
 Both files were already absent from the working tree; this cleanup records their
 deletion in version control. Historical versions remain in Git history.
+
+## Checkout relocation and shell launchers
+
+Completed 2026-11-22 after moving the checkout beneath `sidePrjs/anki/`.
+The failed `diki precedence` command came from an external `~/.zshrc` alias, not
+the application's data-root resolver: both its interpreter and script paths still
+named the previous checkout. Replaced it locally with a `diki` shell function whose
+checkout path is specified once and whose quoted `"$@"` forwards arguments intact.
+Reload `~/.zshrc` or open a new terminal to use the repaired function.
+
+The moved `.ankiFac` also contained old absolute paths in its Bash/Zsh, csh, and
+fish activation scripts and Python console-entry-point shebangs, including `pip`,
+`uvicorn`, and `pre-commit`. Those local generated files were repaired to the current
+environment, preserving installed packages. `source .ankiFac/bin/activate` now
+selects the correct `python`, and the normal console commands run successfully.
+These environment files and shell settings are local, not application Git content.
+
+The audit also checked Git hooks, installed/generated launchd configuration,
+VS Code settings/tasks, local IDE configuration, Python editable-install pointers,
+frontend launchers, and application path settings. The pre-commit hook and scheduler
+already used the current checkout; editor configuration was workspace-relative and
+the data root remained relative to the checkout. The scheduler remained unloaded.
+Historical backups/provenance are not operational checkout-path settings.
+
+### Checklist after another move
+
+1. Update the checkout path in the local `diki` function in `~/.zshrc`, then reload
+   it with `source ~/.zshrc`. External shell launchers cannot discover an arbitrary
+   new checkout location automatically.
+2. Recreate the virtualenv at its new location and reinstall the appropriate
+   requirements, or explicitly repair its activation scripts and generated entry
+   points. Python virtualenvs embed absolute paths; moving one is not sufficient.
+   The direct `.ankiFac/bin/python` invocation can work even while console scripts
+   and activation are stale. Use `python -m pip` with the intended interpreter.
+3. From the relocated code checkout, run `.ankiFac/bin/python -m pre_commit install`
+   to regenerate the local Git hook.
+4. Stop any loaded downloader before moving, then regenerate its configuration
+   with `.ankiFac/bin/python -m tools.diki_launchd --install`. This installs without
+   loading; see README for explicitly enabling the scheduled job.
+5. Verify the code-local `.env` data root. A relative sibling path needs no change
+   when both repositories move together. Select the new interpreter in the editor
+   if it retained an old interpreter choice.
+
+Verification: a new Zsh session resolves `diki` to the repaired function and reaches
+its usage handler without a lookup. Activation, `pip --version`, `uvicorn --version`,
+and `pre-commit --version` succeeded. No old checkout prefix remains in the audited
+active launcher/environment/configuration files. The installed plist passed
+`plutil -lint`; `python -m tools.check` passed Ruff, Pyright, 163 tests (2 opt-in
+live checks skipped), and frontend TypeScript/build. No live Diki/Anki check was run.

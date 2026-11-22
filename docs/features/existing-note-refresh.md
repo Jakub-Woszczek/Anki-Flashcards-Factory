@@ -1,6 +1,6 @@
 # Refresh existing notes through Diki selection
 
-Last updated: 2026-11-21.
+Last updated: 2026-11-22.
 
 Specification status: gradual-cleanup purpose and original-deck preservation
 confirmed; exact compatibility and other preservation rules are still being refined.
@@ -78,6 +78,45 @@ non-Diki-compatible historical English headword.
 - Deck preservation is settled and implemented. A detailed policy for other
   fields/tags and learned-card state remains separate; the owner's latest answer
   explained the cleanup purpose rather than enumerating all preservation rules.
+
+## Alternative-headword matching
+
+Implemented 2026-11-22 following the owner's `anesthetic`/`anaesthetic` report.
+[ADR 0008](../decisions/0008-diki-entry-alternatives-and-existing-notes.md) records
+the motivating screenshot/text, retained-source provenance, and confirmed rules.
+
+`EntrySelection`/`DikiLookup` now carry `matching_headwords`: genuine headwords
+from the selected English→Polish entry in source order, with case-sensitivity
+metadata for each alternative. This is independent of the resolved spelling and
+the full-entry chooser. `FactoryService` searches these alternatives in order,
+validating actual Anki English fields and advisory index candidates. The first
+valid matching spelling wins. Failed alias searches produce an error rather than
+silently reporting a new word. Existing duplicate-note handling stays manual.
+
+Browser responses/drafts carry `matchingHeadwords`, and the existing-note banner
+shows a differing stored English spelling. Preview and comparison use the locked
+existing English value. Save rederives identity from the retained Diki response,
+checks the existing note again before update, and preserves the English field,
+note type, deck mappings, and fallback audio. This applies to add processing and
+stateless review. A creation recheck prevents adding another variant when an
+existing note appeared since lookup. Custom-card creation retains its own rules.
+
+Alternative-aware intents bind the existing note ID and verified headword set.
+Read-back/recovery still compare the preserved English field exactly. Confirmed
+index writes use the actual stored spelling, rather than creating mismatched
+lookup-alias keys. No database schema migration is required.
+
+On reopening a resolved add draft that lacks `matchingHeadwords`, the browser
+requests a preserving lookup. The backend reuses its stored query/headword and
+retains selections, tags, flag, and target override while replacing matching
+metadata. Translation selections are not reset by this upgrade.
+
+The controlled `anaesthetic-variants.html` fixture preserves the observed headword
+order and both meanings. Offline regressions cover ordered matching/fallback,
+actual field validation, per-alternative meaningful case, preserving refresh and
+preview, original-occurrence consumption, consistent index reload, legacy drafts,
+client-tampering rejection, late-arriving existing notes, and refresh recovery.
+See [development verification](../development.md).
 
 ## Verification of the deck-preservation correction
 

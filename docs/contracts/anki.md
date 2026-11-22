@@ -119,6 +119,14 @@ retain the note ID, lock the English field, and block changing its note type in
 that path. These are current capabilities, not yet a complete owner-confirmed
 duplicate/update policy.
 
+Since 2026-11-22, existing-note matching searches the selected Diki entry's genuine
+English alternatives in dictionary order. An existing `anaesthetic` note can be
+refreshed while the resolved lookup spelling is `anesthetic`: the existing English
+field stays locked. Actual note fields and per-alternative casing are validated;
+related entries or arbitrary client-supplied aliases cannot authorize an update.
+The first matching spelling wins; variant duplicates remain the owner's manual
+concern. See [ADR 0008](../decisions/0008-diki-entry-alternatives-and-existing-notes.md).
+
 ### Owner-confirmed refresh objective
 
 Refreshing a manually authored older note during new-word processing should make

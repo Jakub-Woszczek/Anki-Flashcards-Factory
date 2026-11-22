@@ -24,6 +24,8 @@ distinguish confirmed requirements, current behavior, open decisions, and gaps.
 - [Existing-note refresh](features/existing-note-refresh.md)
 - [Marked-note review](features/marked-note-review.md)
 - [Offline cache and preparation](features/offline-cache.md)
+- [Remote Diki downloader](features/remote-downloads.md)
+- [Diki result recognition and lookup choices](features/diki-results.md)
 - [Separate code/data storage and migration](features/data-storage.md)
 - [LLM assistance](features/llm-assistance.md)
 - [Maintenance, retired workflows, and quality tooling](features/maintenance-and-tooling.md)
@@ -36,6 +38,8 @@ distinguish confirmed requirements, current behavior, open decisions, and gaps.
 - [ADR 0004: Source files are the word queues](decisions/0004-file-backed-word-queues.md)
 - [ADR 0005: Diki headwords and meaningful case](decisions/0005-diki-headwords-and-case.md)
 - [ADR 0006: Separate data root](decisions/0006-separate-data-root.md)
+- [ADR 0007: Diki result recognition and choices](decisions/0007-diki-result-recognition.md)
+- [ADR 0008: Selected-entry alternatives and existing notes](decisions/0008-diki-entry-alternatives-and-existing-notes.md)
 - [Roadmap and deferred discussions](roadmap.md): future ideas and open decisions.
 - [Loose thoughts and possible work](todo.md): the owner's pending ideas and reminders, not implementation plans.
 - [Development-history baseline](review.md#repository-evidence-baseline): recent steps and commit evidence.

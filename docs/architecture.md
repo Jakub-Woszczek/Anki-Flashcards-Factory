@@ -17,6 +17,11 @@ runtime-verified or that current code fully implements the intended model.
 - A standalone production service, remote browser workflow, or additional
   operating-system support is not part of the current required scope.
 
+The optional [Northflank dictionary worker](features/remote-downloads.md), restored
+at the owner's request on 2026-11-22, moves only dictionary preparation off the Mac.
+It owns a separate durable job/outbox volume; explicit submit/pull commands connect
+it to the local cache. Application and Anki state remain local.
+
 The owner confirmed this setup in interview batch 17. See
 [project scope](project.md) and [ADR 0001](decisions/0001-personal-workbench-scope.md).
 Anki study may also happen on a phone or laptop, where flags mark items for later

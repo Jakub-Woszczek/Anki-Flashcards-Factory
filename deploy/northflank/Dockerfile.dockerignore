@@ -1,0 +1,11 @@
+# Only the files needed by this deployment enter the Docker build context.
+**
+!deploy/
+!deploy/northflank/
+!deploy/northflank/*.py
+!deploy/northflank/requirements.txt
+!deploy/northflank/Dockerfile
+!backend/
+!backend/settings.py
+!external_apis/
+!external_apis/diki*.py

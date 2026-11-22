@@ -17,6 +17,12 @@ share centralized paths; independent cache/list environment variables were retir
 See [data storage and migration](data-storage.md). Resource selection, snapshot
 retention, and interactive/background request isolation remain unchanged.
 
+An optional [remote downloader](remote-downloads.md) was restored from the earlier
+Northflank experiment on 2026-11-22. It accepts explicit submissions and imports
+completed resources only on manual pull, with durable ACK-before-delete transfers.
+It shares the Mac cache but has its own remote queue and budgets. Deployment is
+pending; this does not implement the buffer/existing-note planner below.
+
 ## Purpose 1: process pending words offline
 
 Originally, the app fetched Diki HTML and MP3 during each word's processing. This
@@ -59,6 +65,11 @@ See [Diki compatibility](../contracts/diki.md) and the
 [contract-first cleanup discussion](../roadmap.md#future-discussion-contract-first-cleanup-of-older-notes).
 
 ## Current behavior and evidence
+
+Result validation now recognizes full collocations and reverse-only results as
+valid source HTML without treating them as English→Polish entries. Spelling,
+related-entry, and ambiguous-headword choices remain distinct; unknown layouts
+produce durable diagnostics. See [Diki result recognition](diki-results.md).
 
 | Area | Inspected behavior | Evidence |
 | --- | --- | --- |

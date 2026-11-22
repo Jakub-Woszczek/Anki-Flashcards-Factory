@@ -3,9 +3,9 @@
 import fcntl
 import hashlib
 import json
+import logging
 import os
 import random
-import re
 import sqlite3
 import tempfile
 import time
@@ -13,15 +13,16 @@ from contextlib import contextmanager
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from pathlib import Path
-from typing import Any, cast
-from urllib.parse import urlencode
+from typing import Any
+from urllib.parse import parse_qs, urlencode, urlsplit
 
 import requests
 from bs4 import BeautifulSoup
 from urllib3.exceptions import ReadTimeoutError
 
-from backend.settings import data_path, diki_cache_directory
-from external_apis.diki_audio import DISCOVERY_VERSION, discover_audio_urls
+from backend.settings import data_path, diki_cache_directory, logs_directory
+from external_apis.diki_audio import DISCOVERY_VERSION, discover_audio_urls, validate_audio_plan
+from external_apis.diki_page import inspect_page
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -107,11 +108,16 @@ class DikiResources:
         jitter=None,
         get=None,
         profile="interactive",
+        before_request=None,
+        retain_headwords=True,
     ):
         if profile not in {"interactive", "background"}:
             raise ValueError("Unknown Diki fetch profile")
         self.profile = profile
         self.root = data_path(root) if root is not None else diki_cache_directory()
+        self.diagnostics_path = (
+            self.root / "logs" if root is not None else logs_directory()
+        ) / "diki-unrecognized-pages.jsonl"
         self.offline = (
             os.getenv("DIKI_OFFLINE", "").lower() in {"1", "true", "yes"}
             if offline is None
@@ -138,6 +144,8 @@ class DikiResources:
             self.interval,
         )
         self.get = get
+        self.before_request = before_request
+        self.retain_headwords = retain_headwords
         self.session = requests.Session()
         for directory in (self.root, self.root / "html", self.root / "audio"):
             directory.mkdir(parents=True, exist_ok=True)
@@ -200,6 +208,9 @@ class DikiResources:
         db = sqlite3.connect(self.root / "index.sqlite3", timeout=30)
         db.row_factory = sqlite3.Row
         try:
+            # ACKs require the cache and SQLite commit to survive a power loss.
+            db.execute("PRAGMA synchronous=EXTRA")
+            db.execute("PRAGMA fullfsync=ON")
             with db:
                 yield db
         finally:
@@ -298,6 +309,11 @@ class DikiResources:
                 handle.flush()
                 os.fsync(handle.fileno())
             os.replace(temporary, path)
+            directory = os.open(path.parent, os.O_RDONLY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
         finally:
             if os.path.exists(temporary):
                 os.unlink(temporary)
@@ -433,6 +449,8 @@ class DikiResources:
             self.sleep(wait)
         self._check_pause()
         # Conservative reservation survives a process killed during the request.
+        if self.before_request is not None:
+            self.before_request(url, kind)
         self.set_setting("next_request_at", self.clock() + TIMEOUT + self._interval() + self.jitter)
         response = None
         started = self.clock()
@@ -524,16 +542,10 @@ class DikiResources:
                 if kind == "html" or content.lstrip().startswith(b"<")
                 else None
             )
-            # The branch above always creates a soup for HTML resources.
-            dictionary_soup = cast(BeautifulSoup, soup)
-            dictionary_html = kind == "html" and (
-                dictionary_soup.select_one(
-                    ".dictionaryEntity, .dictionarySuggestions, .dictionaryNoResults"
-                )
-                is not None
-                or re.search(r"nie znaleziono|brak wyników", dictionary_soup.get_text(), re.I)
-                is not None
-            )
+            page = inspect_page(soup) if kind == "html" and soup is not None else None
+            dictionary_html = page is not None and page.recognized
+            if page is not None:
+                details["pageKind"] = page.kind
             title = soup.title.get_text(" ", strip=True)[:200] if soup and soup.title else None
             marker = next((marker for marker in markers if marker in text), None)
             details.update(bytes=size, title=title)
@@ -550,6 +562,11 @@ class DikiResources:
                 raise Blocked(reason)
             if kind == "html" and not dictionary_html:
                 details["outcome"] = "invalid_html"
+                self.record_unknown_page(
+                    content,
+                    query=parse_qs(urlsplit(url).query).get("q", [None])[0],
+                    origin="network",
+                )
                 self._cooldown(1800, "Unrecognized Diki page; downloads paused")
                 raise ResourceError("Diki did not return a recognized dictionary page")
             if kind == "audio" and status == 200 and not mp3:
@@ -596,11 +613,18 @@ class DikiResources:
                 self.clock() + self.uniform(max(0, interval - self.jitter), interval + self.jitter),
             )
 
-    def _fetch(self, phrase, kind, refresh):
+    def _fetch(self, phrase, kind, refresh, *, audio_plan=None):
         word = normalize_word(phrase)
+        allowed_sources = json.loads(audio_plan["urls"]) if audio_plan is not None else None
+
+        def usable_audio():
+            if allowed_sources is not None:
+                return (self.metadata(word, kind) or {}).get("source") in allowed_sources
+            return self._audio_matches(word)
+
         if not refresh:
             cached = self._cached(word, kind)
-            if cached is not None and (kind == "html" or self._audio_matches(word)):
+            if cached is not None and (kind == "html" or usable_audio()):
                 if kind == "html":
                     from external_apis.diki_api import resolve_lookup
 
@@ -613,25 +637,26 @@ class DikiResources:
                             (int(exact), word),
                         )
                 return cached
-            legacy = self._reuse_legacy(word, kind)
+            legacy = self._reuse_legacy(word, kind) if audio_plan is None else None
             if legacy is not None:
                 return legacy
             row = self.metadata(word, kind)
-            if row and row["state"] == "no_audio":
+            if audio_plan is None and row and row["state"] == "no_audio":
                 raise NoAudio(f"Diki has no downloadable audio for {phrase}")
         if self.offline:
             raise CacheMiss(f"{phrase}: {kind} is not cached. Download it when online.")
         # Fail promptly before waiting on another request. Rechecked under the lock.
         self._check_pause()
-        plan = None
+        plan = audio_plan
         if kind == "audio":
-            # Acquire HTML outside the profile lock (fetch_html uses it too).
-            html = self._fetch(word, "html", False)
-            plan = self._audio_plan(word, html)
+            if plan is None:
+                # Acquire HTML outside the profile lock (fetch_html uses it too).
+                html = self._fetch(word, "html", False)
+                plan = self._audio_plan(word, html)
             if (
                 not refresh
                 and plan["exhausted"]
-                and not (self.metadata(word, kind) or {}).get("digest")
+                and (audio_plan is not None or not (self.metadata(word, kind) or {}).get("digest"))
             ):
                 raise NoAudio(f"Diki has no downloadable audio for {phrase}")
         with file_lock(
@@ -639,10 +664,13 @@ class DikiResources:
         ):
             if not refresh:
                 cached = self._cached(word, kind)
-                if cached is not None and (kind == "html" or self._audio_matches(word)):
+                if cached is not None and (kind == "html" or usable_audio()):
                     return cached
             row = self.metadata(word, kind) or {}
-            if not refresh and row.get("state") == "no_audio":
+            if audio_plan is not None:
+                # A retained old-plan recording must not reset the fallback cursor.
+                row = dict(row, digest=None)
+            if not refresh and audio_plan is None and row.get("state") == "no_audio":
                 raise NoAudio(f"Diki has no downloadable audio for {phrase}")
             if not refresh and row.get("retry_at", 0) > self.clock():
                 raise Deferred(row.get("error") or "Resource is waiting for its next retry")
@@ -779,6 +807,40 @@ class DikiResources:
             db.execute("DELETE FROM resource_failures WHERE word=? AND kind='audio'", (word,))
         raise NoAudio(f"Diki has no downloadable audio for {word}")
 
+    def record_unknown_page(self, content: bytes, *, query: str | None = None, origin="cache"):
+        """Retain bounded structural diagnostics, never remote HTML or credentials."""
+        soup = BeautifulSoup(content, "html.parser")
+        details = {
+            "event": "unrecognized_diki_page",
+            "time": datetime.fromtimestamp(self.clock(), UTC).isoformat(),
+            "query": query,
+            "profile": self.profile,
+            "origin": origin,
+            "source": "https://www.diki.pl/slownik-angielskiego?" + urlencode({"q": query})
+            if query
+            else None,
+            "sha256": hashlib.sha256(content).hexdigest(),
+            "bytes": len(content),
+            "title": soup.title.get_text(" ", strip=True)[:200] if soup.title else None,
+            "markers": {
+                marker: len(soup.select(selector))
+                for marker, selector in {
+                    "entities": ".dictionaryEntity",
+                    "suggestions": ".dictionarySuggestions",
+                    "collocations": ".dictionaryCollocationUnits",
+                    "englishMeaningLists": "ol.foreignToNativeMeanings",
+                    "reverseMeaningLists": "ol.nativeToForeignEntrySlices",
+                    "wordByWord": ".wordByWordTranslation",
+                }.items()
+            },
+        }
+        try:
+            self.diagnostics_path.parent.mkdir(parents=True, exist_ok=True)
+            with self.diagnostics_path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(details, ensure_ascii=False) + "\n")
+        except OSError:
+            logging.getLogger(__name__).exception("Could not write Diki layout diagnostic")
+
     def fetch_html(self, word, *, refresh=False) -> str:
         from external_apis.diki_api import resolve_lookup
 
@@ -786,25 +848,66 @@ class DikiResources:
         content = self._fetch(word, "html", refresh)
         text = content.decode("utf-8", errors="replace")
         result = resolve_lookup(text, word)
+        if result.page and not result.page.recognized:
+            self.record_unknown_page(content, query=word)
+        if self.retain_headwords and result.word and result.meanings:
+            self.retain_headword(word, result.word, text)
+        return text
+
+    def retain_headword(self, word: str, headword: str, text: str):
         # A queued alias and its resolved headword must both work offline. Keep
         # existing independent snapshots; only fill missing canonical resources.
-        if result.word and result.meanings and result.word != word:
-            if self._cached(result.word, "html") is None:
+        if headword != word:
+            if self._cached(headword, "html") is None:
                 row = self.metadata(word, "html")
                 if row:
-                    self._save(result.word, "html", content, row["status"], row["source"], True)
+                    self._save(
+                        headword, "html", text.encode("utf-8"), row["status"], row["source"], True
+                    )
             audio = self._cached(word, "audio")
             row = self.metadata(word, "audio") or {}
             if (
                 audio is not None
-                and self._cached(result.word, "audio") is None
-                and row.get("source") in discover_audio_urls(text, result.word)
+                and self._cached(headword, "audio") is None
+                and row.get("source") in discover_audio_urls(text, headword)
             ):
-                self._save(result.word, "audio", audio, row["status"], row["source"])
-        return text
+                self._save(headword, "audio", audio, row["status"], row["source"])
 
     def fetch_audio(self, word, *, refresh=False) -> bytes:
         return self._fetch(word, "audio", refresh)
+
+    def fetch_audio_from_plan(self, word, instruction) -> bytes:
+        """Fetch only Mac-discovered recordings, never HTML or guessed URLs."""
+        validate_audio_plan(instruction)
+        word = normalize_word(word)
+        urls = json.dumps(instruction["urls"])
+        with (
+            file_lock(
+                self.root / "cache.lock", deadline=self.deadline, clock=self.clock, sleep=self.sleep
+            ),
+            self.db() as db,
+        ):
+            row = db.execute("SELECT * FROM audio_discovery WHERE word=?", (word,)).fetchone()
+            if (
+                row
+                and row["version"] == instruction["discoveryVersion"]
+                and row["html_digest"] == instruction["htmlDigest"]
+                and row["urls"] == urls
+            ):
+                plan = dict(row)
+            else:
+                db.execute(
+                    "INSERT OR REPLACE INTO audio_discovery VALUES (?,?,?,?,0)",
+                    (word, instruction["discoveryVersion"], instruction["htmlDigest"], urls),
+                )
+                plan = {
+                    "word": word,
+                    "version": instruction["discoveryVersion"],
+                    "html_digest": instruction["htmlDigest"],
+                    "urls": urls,
+                    "exhausted": 0,
+                }
+        return self._fetch(word, "audio", False, audio_plan=plan)
 
     def snapshot(self, *, profile=None):
         """Local metadata only; missing/truncated files never count as downloaded."""

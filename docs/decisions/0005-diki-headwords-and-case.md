@@ -48,6 +48,10 @@ candidate discovery therefore does not establish case-specific note identity.
 The owner explicitly selected exact-case preference over always asking for a
 choice when the input already matches one case-distinct headword.
 
+[ADR 0007](0007-diki-result-recognition.md) reconfirms exact-match automation and
+first-headword unique-entry fallback, separates full-entry choices from spelling
+and related-entry suggestions, and implements selection from retained HTML.
+
 ## Cache, matching, and compatibility consequences
 
 - HTML/audio cache query keys preserve case. Existing lowercase paths and snapshots

@@ -19,6 +19,8 @@ class CurrentPatchRequest(SourceEntryRequest):
 
 class LookupRequest(SourceEntryRequest):
     word: str | None = None
+    headword: str | None = None
+    preserveDraft: bool = False
 
 
 class CommitRequest(SourceEntryRequest):
@@ -41,6 +43,7 @@ class ReviewSnapshotRequest(BaseModel):
 
 class ReviewItemLookupRequest(BaseModel):
     word: str
+    headword: str | None = None
     fieldMapping: dict[str, Any] = Field(default_factory=dict)
 
 

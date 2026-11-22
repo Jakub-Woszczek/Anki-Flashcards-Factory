@@ -1,9 +1,10 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TypedDict, cast
 
 from bs4 import BeautifulSoup, Tag
 
-from external_apis.diki_entries import select_entries
+from external_apis.diki_entries import MatchingHeadword, select_entries
+from external_apis.diki_page import DikiPage, english_entries, headwords, inspect_page
 from external_apis.diki_resources import DikiResources, ResourceError
 
 
@@ -23,6 +24,10 @@ class DikiLookup:
     meanings: list[Meaning]
     suggestions: list[str]
     case_sensitive: bool = False
+    page: DikiPage | None = None
+    entry_choices: list[str] = field(default_factory=list)
+    related_entries: list[str] = field(default_factory=list)
+    matching_headwords: list[MatchingHeadword] = field(default_factory=list)
 
     @property
     def translations(self) -> list[list[str]]:
@@ -30,12 +35,18 @@ class DikiLookup:
 
 
 def resolve_lookup(html: str, phrase: str) -> DikiLookup:
-    selection = select_entries(BeautifulSoup(html, "html.parser"), phrase, allow_unique=True)
+    soup = BeautifulSoup(html, "html.parser")
+    page = inspect_page(soup)
+    selection = select_entries(soup, phrase, allow_unique=True)
     return DikiLookup(
         selection.word,
         _entry_meanings(selection.entries),
-        selection.suggestions,
+        list(page.spelling_suggestions) if page.kind == "suggestions" else [],
         selection.case_sensitive,
+        page,
+        list(page.entry_choices) if selection.word is None and page.kind == "entries" else [],
+        list(page.related_entries) if page.kind == "related" else [],
+        selection.matching_headwords,
     )
 
 
@@ -64,7 +75,7 @@ class DikiApi:
         soup = BeautifulSoup(html, "html.parser")
 
         # Znajdź wszystkie elementy słownika
-        dictionary_entities = soup.select("div.dictionaryEntity")
+        dictionary_entities = english_entries(soup)
 
         phrases = self.similar_phrases(soup)
         for entity in dictionary_entities:
@@ -78,10 +89,21 @@ class DikiApi:
 
         return phrases
 
-    def lookup(self, phrase) -> DikiLookup:
+    def lookup(self, phrase, *, headword: str | None = None) -> DikiLookup:
         """One resource read, with per-call failures instead of shared error state."""
         html = self.resources.fetch_html(phrase)
-        return resolve_lookup(html, phrase)
+        if headword is not None:
+            available = {
+                word
+                for entry in english_entries(BeautifulSoup(html, "html.parser"))
+                for word in headwords(entry)
+            }
+            if headword not in available:
+                raise ResourceError("That headword is not an English→Polish entry in this response")
+        result = resolve_lookup(html, headword if headword is not None else phrase)
+        if headword is not None and result.word:
+            self.resources.retain_headword(phrase, result.word, html)
+        return result
 
     def similar_phrases(self, soup):
         """

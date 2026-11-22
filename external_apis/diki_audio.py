@@ -10,6 +10,32 @@ from external_apis.diki_entries import select_entries
 
 # Bump when selection rules change, so old negative results are reconsidered.
 DISCOVERY_VERSION = 2
+MAX_AUDIO_URLS = 32
+
+
+def validate_audio_plan(plan):
+    """Validate bounded, HTML-free instructions from the authenticated Mac."""
+    try:
+        if set(plan) != {"htmlDigest", "urls", "discoveryVersion"}:
+            raise ValueError("Invalid audio plan fields")
+        if not re.fullmatch(r"[a-f0-9]{64}", plan["htmlDigest"]):
+            raise ValueError("Invalid audio plan HTML checksum")
+        if (
+            type(plan["discoveryVersion"]) is not int
+            or plan["discoveryVersion"] != DISCOVERY_VERSION
+        ):
+            raise ValueError("Audio discovery versions differ; update the client/server")
+        urls = plan["urls"]
+        if not isinstance(urls, list) or not 1 <= len(urls) <= MAX_AUDIO_URLS:
+            raise ValueError("Invalid audio URL count")
+        if len(set(urls)) != len(urls):
+            raise ValueError("Duplicate audio URL")
+        for url in urls:
+            if not isinstance(url, str) or len(url) > 2048 or _recording_url(url) != url:
+                raise ValueError("Invalid Diki recording URL")
+        return plan
+    except (TypeError, KeyError, AttributeError):
+        raise ValueError("Malformed audio plan") from None
 
 
 def _normalize(text):

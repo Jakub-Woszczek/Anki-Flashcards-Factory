@@ -102,6 +102,17 @@ python main.py --app
 Aplikacja otworzy sie pod adresem `http://127.0.0.1:8000`.
 Uzyj `--no-browser`, aby nie otwierac automatycznie przegladarki.
 
+W istniejacym checkoutcie mozna uruchomic aplikacje bez aktywacji srodowiska:
+
+```bash
+.ankiFac/bin/python main.py --app
+```
+
+Po przeniesieniu katalogu sprawdz tez zewnetrzny launcher `diki` w `~/.zshrc`,
+virtualenv, hook Git i scheduler. Virtualenv zawiera absolutne sciezki; sam fakt,
+ze jego Python dziala, nie oznacza, ze `activate`, `pip` lub `uvicorn` sa poprawne.
+[Lista czynnosci po przeniesieniu](docs/features/maintenance-and-tooling.md#checklist-after-another-move).
+
 Podczas pracy frontendowej uruchom osobno:
 
 ```bash
@@ -297,6 +308,27 @@ Limit nie obejmuje czekania na odpowiedz uzytkownika przy wyborze/zapisie slowa.
 `--refresh` jawnie odswieza zasoby, w tym potwierdzone braki, w granicach podanej
 partii. Nadal respektuje odstepy i cooldown swojego profilu. Przy odswiezaniu wybranych
 list uzyj `--words-dir`. Normalny harmonogram powinien dzialac bez `--refresh`.
+
+### Zdalny downloader Northflank
+
+Opcjonalny serwer przechowuje trwala kolejke oraz gotowe HTML/MP3. Mac wysyla
+brakujace zadania i pobiera wyniki **tylko po jawnym `pull`**. Import waliduje
+manifest, checksumy i zapis lokalny; dopiero potem ACK pozwala serwerowi usunac
+pliki. Istniejacy HTML pozostaje na Macu; zadanie audio zawiera tylko reklamowane
+URL-e, checksum HTML i wersje selektora.
+
+```bash
+.ankiFac/bin/python -m tools.diki_remote submit
+.ankiFac/bin/python -m tools.diki_remote status
+.ankiFac/bin/python -m tools.diki_remote pull
+```
+
+Konfiguracja `DIKI_REMOTE_URL` / `DIKI_REMOTE_TOKEN`, wdrozenie z trwalym wolumenem
+i odzyskiwanie: [deploy/northflank/README.md](deploy/northflank/README.md).
+Lokalne sciezki nadal wynikaja z `ANKI_FACTORY_DATA_DIR`. Polecenia nie pobieraja
+z Diki lokalnie i nie instaluja automatycznego submit/pull. Wybierajac zdalne
+pobieranie, wylacz lokalny harmonogram ponizej. Aplikacja interaktywna nadal ma
+wlasny tryb cache-first; `DIKI_OFFLINE=1` blokuje jej lokalne pobieranie.
 
 ### Harmonogram macOS (launchd)
 

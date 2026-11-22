@@ -141,15 +141,33 @@ def run_lookup(api, phrase):
         ask_save(result.word)
         return
 
-    # No exact match — look for similar words
-    spellings = set(result.suggestions)
+    if result.entry_choices:
+        console.print("\n[yellow]Choose an English headword from this response:[/yellow]")
+        chosen = pick_from_list(result.entry_choices)
+        if chosen is None:
+            return
+        try:
+            result = api.lookup(phrase, headword=chosen)
+        except ResourceError as error:
+            console.print(f"[red]{error}[/red]")
+            sys.exit(1)
+        display_meanings(result.word, result.meanings)
+        ask_save(result.word)
+        return
+
+    # The sources remain distinct, with spelling suggestions taking precedence.
+    spellings = set(result.suggestions or result.related_entries)
     spellings.discard(phrase)
 
     if not spellings:
         console.print(f"[red]No results found for '{phrase}'.[/red]")
         sys.exit(1)
 
-    console.print("\n[yellow]No exact match.[/yellow] Did you mean:")
+    console.print(
+        "\n[yellow]No exact match.[/yellow] Did you mean:"
+        if result.suggestions
+        else "\n[yellow]Related dictionary entries:[/yellow]"
+    )
     chosen = pick_from_list(spellings)
 
     if chosen is None:

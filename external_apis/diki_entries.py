@@ -1,8 +1,11 @@
 """Select genuine dictionary entries without losing the dictionary's spelling."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import TypedDict
 
 from bs4 import BeautifulSoup, Tag
+
+from external_apis.diki_page import english_entries
 
 
 def spelling(text: str) -> str:
@@ -15,6 +18,12 @@ class EntrySelection:
     entries: list[Tag]
     suggestions: list[str]
     case_sensitive: bool = False
+    matching_headwords: list["MatchingHeadword"] = field(default_factory=list)
+
+
+class MatchingHeadword(TypedDict):
+    word: str
+    caseSensitive: bool
 
 
 def select_entries(
@@ -22,7 +31,12 @@ def select_entries(
 ) -> EntrySelection:
     phrase = spelling(phrase)
     candidates = []
-    for entity in soup.select("div.dictionaryEntity"):
+    for entity in english_entries(soup) if allow_unique else soup.select("div.dictionaryEntity"):
+        if (
+            entity.select_one(":scope > ol.nativeToForeignEntrySlices") is not None
+            and entity.select_one(":scope > ol.foreignToNativeMeanings") is None
+        ):
+            continue
         header = entity.find("div", class_="hws")
         if header is None:
             continue
@@ -48,6 +62,23 @@ def select_entries(
     variants = {
         value for _, words in candidates for value in words if value.lower() == word.lower()
     }
+    selected = [(entity, words) for entity, words in candidates if word in words]
+    alternatives = list(dict.fromkeys(value for _, words in selected for value in words))
+    matching_headwords: list[MatchingHeadword] = [
+        {
+            "word": alternative,
+            "caseSensitive": len(
+                {
+                    value
+                    for _, words in candidates
+                    for value in words
+                    if value.lower() == alternative.lower()
+                }
+            )
+            > 1,
+        }
+        for alternative in alternatives
+    ]
     return EntrySelection(
-        word, [entity for entity, words in candidates if word in words], [], len(variants) > 1
+        word, [entity for entity, _ in selected], [], len(variants) > 1, matching_headwords
     )

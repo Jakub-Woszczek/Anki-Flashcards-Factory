@@ -17,6 +17,7 @@ def main() -> int:
             os.environ,
             {
                 "RUN_LIVE_DIKI_TESTS": "0",
+                "RUN_LOOPBACK_TESTS": "0",
                 "DIKI_OFFLINE": "0",
                 "ANKI_FACTORY_DATA_DIR": directory,
                 **dict.fromkeys(RETIRED_PATH_VARIABLES, ""),

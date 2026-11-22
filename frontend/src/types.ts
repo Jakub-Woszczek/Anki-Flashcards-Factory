@@ -6,6 +6,8 @@ export type Translation = {
 }
 
 export type Draft = {
+  matchingHeadwords?: { word: string; caseSensitive: boolean }[]
+  lookupQuery?: string
   entryId?: string
   sourceWord?: string
   word?: string
@@ -100,6 +102,12 @@ export type Status = {
 }
 
 export type LookupResult = {
+  matchingHeadwords?: { word: string; caseSensitive: boolean }[]
+  draft?: Draft | null
+  lookupQuery?: string
+  pageKind?: 'entries' | 'suggestions' | 'related' | 'collocation' | 'not_found' | 'unknown' | null
+  entryChoices?: string[]
+  relatedEntries?: string[]
   entryId?: string
   sourceWord?: string
   word: string

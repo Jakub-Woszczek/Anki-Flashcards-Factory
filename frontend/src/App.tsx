@@ -776,9 +776,11 @@ function Workspace({ sessionId, review, onExit }: { sessionId?: string; review?:
           groups: nextSession.draft.groups ?? [],
           suggestions: [],
           existingNoteId: nextSession.draft.existingNoteId,
+          matchingHeadwords: nextSession.draft.matchingHeadwords,
         })
         if (nextSession.draft.existingNoteId) await loadExistingNote(false)
-        if (!nextSession.draft.resolvedWord || !nextSession.draft.groups?.length) await lookupCurrent(nextSession.draft.sourceWord ?? nextSession.draft.word)
+        if (!nextSession.draft.resolvedWord || !nextSession.draft.groups?.length) await lookupCurrent(nextSession.draft.lookupQuery ?? nextSession.draft.sourceWord ?? nextSession.draft.word)
+        else if (!nextSession.draft.matchingHeadwords) await lookupCurrent(undefined, undefined, true)
       } else {
         await lookupCurrent()
       }
@@ -829,32 +831,35 @@ function Workspace({ sessionId, review, onExit }: { sessionId?: string; review?:
     }
   }
 
-  async function lookupCurrent(word?: string) {
+  async function lookupCurrent(word?: string, headword?: string, preserveDraft = false) {
     const entryId = sourceEntry.current
     setError(null)
     setPreview(null)
     try {
       const result = isReview
-        ? await api.post<LookupResult>('/backend/review/item/lookup', { word: word ?? draft?.word ?? '', fieldMapping: config.fieldMapping })
-        : await api.post<LookupResult>(`/backend/sessions/${sessionId}/current/lookup`, { word, entryId })
+        ? await api.post<LookupResult>('/backend/review/item/lookup', { word: word ?? draft?.word ?? '', headword, fieldMapping: config.fieldMapping })
+        : await api.post<LookupResult>(`/backend/sessions/${sessionId}/current/lookup`, { word, headword, entryId, preserveDraft })
       if (!isReview && entryId !== sourceEntry.current) return
       setLookup(result)
       setSuggestionInput(result.word)
       const nextDraft: Draft = {
+        ...result.draft,
         entryId: result.entryId,
         sourceWord: result.sourceWord ?? result.word,
         word: result.word,
         resolvedWord: result.resolvedWord,
+        lookupQuery: result.lookupQuery,
         caseSensitive: result.caseSensitive,
+        matchingHeadwords: result.matchingHeadwords,
         groups: result.groups,
-        tags: session?.mode === 'review' ? draft?.tags ?? existing?.tags ?? [] : [],
+        tags: result.draft?.tags ?? (session?.mode === 'review' ? draft?.tags ?? existing?.tags ?? [] : []),
         existingNoteId: result.existingNoteId,
       }
       setDraft(nextDraft)
       setExisting(null)
       if (result.existingNoteId) {
         const note = await loadExistingNote(false, result.existingNoteId)
-        if (note && session?.mode === 'add') {
+        if (note && session?.mode === 'add' && !preserveDraft) {
           const draftWithExistingTags = { ...nextDraft, tags: note.tags }
           setDraft(draftWithExistingTags)
           await persistDraft(draftWithExistingTags, false)
@@ -1269,6 +1274,7 @@ function Workspace({ sessionId, review, onExit }: { sessionId?: string; review?:
   const allModels = [...deckModels, ...models.filter((model) => !deckModels.includes(model)), ...suggestedModels]
   const additionalFields = config.fieldMapping.additionalFields ?? {}
   const cardTarget = effectiveConfig()
+  const existingEnglish = existing ? stripHtml(existing.fields[cardTarget.fieldMapping.englishField ?? ''] ?? '') : ''
   const cardReady = session.mode === 'review' || lookup?.exactMatch === true
   const useGeminiReview = Boolean(isDuplicate && draft?.tags?.includes('GEMINI_DIFF'))
 
@@ -1300,6 +1306,8 @@ function Workspace({ sessionId, review, onExit }: { sessionId?: string; review?:
             <div className="word-banner__meta"><span>{session.completedCount} completed</span><span>Position {(session.current?.position ?? session.completedCount) + 1}</span><span className={draft?.targetOverride ? 'word-banner__target word-banner__target--override' : 'word-banner__target'}>{draft?.targetOverride ? 'One-card deck' : 'Deck'}: {cardTarget.deckName}</span><span className={draft?.targetOverride ? 'word-banner__target word-banner__target--override' : 'word-banner__target'}>{draft?.targetOverride ? 'One-card note type' : 'Note type'}: {cardTarget.modelName}</span>{isDuplicate ? <b>Existing note found</b> : <b>New note</b>}</div>
           </section>
 
+          {existingEnglish && existingEnglish !== currentWord ? <p className="muted">Existing English: <strong>{existingEnglish}</strong> — kept when updating this note.</p> : null}
+
           {isDuplicate ? <section className="duplicate-decision"><div><p className="duplicate-alert-label">EXISTING ANKI NOTE DETECTED</p>{existing ? <div className="duplicate-decision__details"><div className="duplicate-decision__current"><span>Current translation</span><div dangerouslySetInnerHTML={{ __html: existing.fields[cardTarget.fieldMapping.translationField ?? ''] || '<i>(empty)</i>' }} /></div><p className="duplicate-decision__tags"><strong>Existing tags:</strong> <span>{existing.tags.length ? existing.tags.join(', ') : 'none'}</span></p></div> : <p>Loading the current Anki card...</p>}</div>{!isReview ? <div className="duplicate-decision__actions"><button className="button button--secondary" type="button" disabled={saving} onClick={() => void discardCurrent()}>Discard card from queue</button></div> : null}</section> : null}
 
           <section className="ai-assist"><button className="button button--secondary" type="button" disabled={geminiLoading || !draft?.word} onClick={() => void askGemini(useGeminiReview)}>{geminiLoading ? 'Asking AI...' : useGeminiReview ? 'Compare translations using AI' : 'Translate word using AI'}</button>{geminiText ? <div className="ai-assist__answer"><MarkdownAnswer value={geminiText} /></div> : null}</section>
@@ -1307,7 +1315,16 @@ function Workspace({ sessionId, review, onExit }: { sessionId?: string; review?:
           <div className="workspace-grid">
 
             <section className="editor-column">
-              {session.mode === 'add' && lookup && !lookup.exactMatch ? <section className="panel suggestion-panel"><p className="eyebrow">DIKI COULD NOT CONFIRM THIS SPELLING</p><h2>Choose a suggestion or try another spelling</h2><div className="suggestion-edit"><input className="text-input" value={suggestionInput} onChange={(event) => setSuggestionInput(event.target.value)} /><button className="button button--secondary" type="button" onClick={() => void lookupCurrent(suggestionInput)}>Look up</button></div>{lookup.suggestions.length ? <div className="suggestion-list">{lookup.suggestions.map((suggestion) => <button key={suggestion} type="button" onClick={() => void lookupCurrent(suggestion)}>{suggestion}</button>)}</div> : <p className="muted">Diki did not provide alternate spellings. You can discard this entry or create a custom card.</p>}</section> : null}
+              {lookup && !lookup.exactMatch ? <section className="panel suggestion-panel">
+                <p className="eyebrow">DIKI LOOKUP</p>
+                <h2>{lookup.entryChoices?.length ? 'Choose an English headword' : lookup.suggestions.length ? 'Choose a spelling suggestion' : lookup.relatedEntries?.length ? 'Choose a related dictionary entry' : lookup.pageKind === 'collocation' ? 'Diki returned a collocation' : lookup.pageKind === 'unknown' ? 'Unrecognized Diki layout' : 'No English→Polish entry found'}</h2>
+                {lookup.pageKind === 'collocation' ? <p className="muted">This is a collocation result, not a full dictionary entry.</p> : null}
+                <div className="suggestion-edit"><input className="text-input" value={suggestionInput} onChange={(event) => setSuggestionInput(event.target.value)} /><button className="button button--secondary" type="button" onClick={() => void lookupCurrent(suggestionInput)}>Look up</button></div>
+                {lookup.entryChoices?.length ? <div className="suggestion-list">{lookup.entryChoices.map((headword) => <button key={headword} type="button" onClick={() => void lookupCurrent(lookup.lookupQuery ?? lookup.word, headword)}>{headword}</button>)}</div>
+                  : lookup.suggestions.length ? <div className="suggestion-list">{lookup.suggestions.map((suggestion) => <button key={suggestion} type="button" onClick={() => void lookupCurrent(suggestion)}>{suggestion}</button>)}</div>
+                    : lookup.relatedEntries?.length ? <div className="suggestion-list">{lookup.relatedEntries.map((related) => <button key={related} type="button" onClick={() => void lookupCurrent(related)}>{related}</button>)}</div>
+                      : <p className="muted">No alternative entries were provided. You can try another lookup or create a custom card.</p>}
+              </section> : null}
 
               {cardReady ? <><section className="panel translations-panel">
                 <div className="panel__heading"><div><h2>Meanings from Diki</h2></div><div className="translation-heading-actions">{session.mode === 'review' ? <button className="tiny-button" type="button" disabled={!draft?.word} onClick={() => void lookupCurrent(draft?.word)}>Refresh Diki</button> : null}<span className="counter-badge">{selectedGroups(draft).flat().length} selected</span></div></div>

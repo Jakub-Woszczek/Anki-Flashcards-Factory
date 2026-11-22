@@ -262,6 +262,7 @@ class WordCompletion:
             note.get("fields", {}).get(expected.get("englishField"), {}).get("value")
             or save["word"]
         )
+        stored_word = " ".join(re.sub(r"<[^>]+>", " ", html.unescape(stored_word)).split())
         self._check_confirmation_profile(anki, save["profile"])
         # Persist confirmation and the local index together, before touching the list.
         with self.connect() as db:
@@ -274,7 +275,7 @@ class WordCompletion:
                 """INSERT INTO note_index VALUES (?,?,?)
                 ON CONFLICT(normalized_word) DO UPDATE SET note_id=excluded.note_id,
                 en_word=excluded.en_word""",
-                (save["word"], stored_word, save["note_id"]),
+                (field_word(stored_word), stored_word, save["note_id"]),
             )
         return note
 

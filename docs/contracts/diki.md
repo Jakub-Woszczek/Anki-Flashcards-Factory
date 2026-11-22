@@ -129,11 +129,38 @@ If the relevant Diki entry has several genuine English headwords or alternative
 spellings, the owner does not consider the choice between them important. Any
 such headword is acceptable for compatibility with that entry.
 
-A UI option to choose among them would be a nice addition, with low priority. Do
-not make manual selection a mandatory step or treat this minor preference as a
-blocker. No specific automatic ordering/preference was chosen in the discussion.
-This applies to actual headwords of the relevant entry, not unrelated suggestions
-or the page's related-phrases section.
+Unique-entry fallback uses the entry's first genuine headword, as reconfirmed on
+2026-11-22. Any of its genuine alternatives remains acceptable. A UI option to
+choose between alternatives within that same entry is low priority, not a required
+step. This differs from ambiguity between several full entries, where a choice is
+required if none matches. Related phrases and generated collocations do not
+provide alternative headwords for the relevant entry.
+
+### Result recognition and choices — accepted 2026-11-22
+
+Only English→Polish entries establish a result for this workflow; reverse-only
+content counts as not found. Full entries take precedence over collocations.
+Exact matching remains automatic; ambiguous full entries require a headword
+choice. Alternatives within a single entry remain acceptable, with its first
+headword used by unique-entry fallback. Related compact English entries offer
+their first headword per row through a separate choice list; spelling suggestions
+take precedence over that list and word-by-word fallback. Negative and
+word-by-word notices do not turn supporting translations into phrase entries.
+Unknown layouts are logged for later discovery. Collocation content handling is
+still deferred. See [ADR 0007](../decisions/0007-diki-result-recognition.md).
+
+### Alternative headwords and existing Anki notes — accepted 2026-11-22
+
+The selected entry's genuine English headwords represent the same entry for
+existing-note matching. Search them in Diki order, using the first valid match;
+the selected spelling itself still follows the resolution rules above.
+`anesthetic` therefore finds an existing `anaesthetic` note because that is the
+entry's first genuine headword. Related/unselected entries and spelling similarity
+are not equivalence evidence. Preserve meaningful-case safeguards for every
+alternative, not just the selected spelling. Refresh retains the existing English
+value and note ID. Duplicate variant notes remain a manual collection concern.
+See [ADR 0008](../decisions/0008-diki-entry-alternatives-and-existing-notes.md)
+for the source case, detailed matching rules, and verification.
 
 ## Human translation selection
 

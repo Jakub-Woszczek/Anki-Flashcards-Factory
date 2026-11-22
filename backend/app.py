@@ -110,7 +110,13 @@ def patch_session(session_id: str, request: SessionPatchRequest):
 
 @app.post("/backend/sessions/{session_id}/current/lookup")
 def lookup_current(session_id: str, request: LookupRequest):
-    return service.lookup_current(session_id, request.word, entry_id=request.entryId)
+    return service.lookup_current(
+        session_id,
+        request.word,
+        entry_id=request.entryId,
+        headword=request.headword,
+        preserve_draft=request.preserveDraft,
+    )
 
 
 @app.patch("/backend/sessions/{session_id}/current")
@@ -176,7 +182,7 @@ def review_snapshot(request: ReviewSnapshotRequest):
 
 @app.post("/backend/review/item/lookup")
 def review_item_lookup(request: ReviewItemLookupRequest):
-    return service.review_item_lookup(request.word, request.fieldMapping)
+    return service.review_item_lookup(request.word, request.fieldMapping, headword=request.headword)
 
 
 @app.post("/backend/review/item/existing-note")

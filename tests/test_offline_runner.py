@@ -16,6 +16,7 @@ class TestOfflineRunner(unittest.TestCase):
 
         def probe():
             self.assertEqual(os.environ["RUN_LIVE_DIKI_TESTS"], "0")
+            self.assertEqual(os.environ["RUN_LOOPBACK_TESTS"], "0")
             self.assertEqual(os.environ["DIKI_OFFLINE"], "0")
             sandbox = Path(os.environ["ANKI_FACTORY_DATA_DIR"])
             self.assertTrue(sandbox.is_dir())
@@ -31,7 +32,10 @@ class TestOfflineRunner(unittest.TestCase):
         runner = unittest.TextTestRunner(stream=io.StringIO())
         suite = unittest.TestSuite([unittest.FunctionTestCase(probe)])
         with (
-            patch.dict(os.environ, {"RUN_LIVE_DIKI_TESTS": "1", "DIKI_OFFLINE": "1"}),
+            patch.dict(
+                os.environ,
+                {"RUN_LIVE_DIKI_TESTS": "1", "RUN_LOOPBACK_TESTS": "1", "DIKI_OFFLINE": "1"},
+            ),
             patch.object(socket.socket, "connect", transports[0]),
             patch.object(socket.socket, "connect_ex", transports[1]),
             patch("socket.getaddrinfo", transports[2]),
@@ -40,6 +44,7 @@ class TestOfflineRunner(unittest.TestCase):
         ):
             self.assertEqual(main(), 0)
             self.assertEqual(os.environ["RUN_LIVE_DIKI_TESTS"], "1")
+            self.assertEqual(os.environ["RUN_LOOPBACK_TESTS"], "1")
             self.assertEqual(os.environ["DIKI_OFFLINE"], "1")
         for transport in transports:
             transport.assert_not_called()

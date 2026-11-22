@@ -77,15 +77,17 @@ class TestDikiHeadwords(TestCase):
                 )
             result = resolve_lookup(document, ambiguous)
             self.assertIsNone(result.word)
-            self.assertEqual(set(result.suggestions), {case[0] for case in cases})
+            self.assertEqual(set(result.entry_choices), {case[0] for case in cases})
+            self.assertEqual(result.suggestions, [])
             self.assertEqual(discover_audio_urls(document, ambiguous), [])
 
     def test_multiple_unmatched_entries_are_suggestions_not_an_automatic_first_choice(self):
         result = resolve_lookup(BASEL + ASTRAY, "unknown")
         self.assertIsNone(result.word)
-        self.assertIn("Basel", result.suggestions)
-        self.assertIn("lead somebody astray", result.suggestions)
-        self.assertNotIn("Basel Convention", result.suggestions)
+        self.assertIn("Basel", result.entry_choices)
+        self.assertIn("lead somebody astray", result.entry_choices)
+        self.assertNotIn("Basel Convention", result.entry_choices)
+        self.assertEqual(result.suggestions, [])
 
     def test_cli_saves_resolved_headword_instead_of_query(self):
         for document, query, expected in [
