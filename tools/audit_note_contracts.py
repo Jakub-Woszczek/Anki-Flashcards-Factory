@@ -5,10 +5,8 @@ import json
 import sys
 from collections import Counter
 
-from dotenv import load_dotenv
-
 from backend.note_contracts import CONTRACT_VERSION, NOTE_TYPES, parse_en_word
-from backend.settings import ROOT_DIR
+from backend.settings import load_environment
 from external_apis.anki_connect import AnkiConnect
 
 
@@ -74,7 +72,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.sample_size < 0:
         parser.error("sample-size must be nonnegative")
-    load_dotenv(ROOT_DIR / ".env")
+    load_environment()
     try:
         report = audit_en_words(AnkiConnect(), args.sample_size)
     except RuntimeError as error:

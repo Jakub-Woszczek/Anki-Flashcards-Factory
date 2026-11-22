@@ -1,6 +1,5 @@
 from contextlib import asynccontextmanager
 
-from dotenv import load_dotenv
 from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
@@ -24,10 +23,10 @@ from backend.schemas import (
     SourceEntryRequest,
 )
 from backend.services import FactoryService, ServiceError
-from backend.settings import ROOT_DIR
+from backend.settings import ROOT_DIR, load_environment
 from external_apis.diki_lists import coverage
 
-load_dotenv(ROOT_DIR / ".env")
+load_environment()
 service = FactoryService()
 
 

@@ -43,6 +43,7 @@ def atomic_write(path: Path, content: bytes):
 
 def append_word(path: Path, word: str) -> bool:
     path = path.resolve()
+    path.parent.mkdir(parents=True, exist_ok=True)
     with list_lock(path):
         content = path.read_bytes() if path.exists() else b""
         words = {" ".join(line.split()) for line in content.decode("utf-8-sig").splitlines()}

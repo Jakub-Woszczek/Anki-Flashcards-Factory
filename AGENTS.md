@@ -13,6 +13,10 @@
   or mix completed-work records into the pending list.
 - This is a personal, local Mac workbench. Preserve existing launch commands,
   resource paths, Anki field contracts, and collection state during cleanup work.
+- Runtime data lives outside this checkout under required `ANKI_FACTORY_DATA_DIR`.
+  Use `backend/settings.py` helpers; do not add code-local queue/cache/database
+  defaults or independent path environment variables. Keep controlled test fixtures
+  with code and all personal data out of code commits. See `docs/features/data-storage.md`.
 - Run `python -m tools.check` after code changes. It checks Ruff lint/formatting,
   Pyright, guarded offline tests, and the frontend TypeScript/build pipeline.
 - Use `python -m tools.test_offline` for routine test-only verification. Real Anki

@@ -321,7 +321,10 @@ class WordCompletion:
                     )
                     db.executemany(
                         "UPDATE word_saves SET backup_path=? WHERE id=?",
-                        [(str(backup), save["id"]) for save in saves.values()],
+                        [
+                            (backup.relative_to(self.db_path.parent).as_posix(), save["id"])
+                            for save in saves.values()
+                        ],
                     )
                 replacement = b"".join(remaining)
                 if content.startswith(b"\xef\xbb\xbf") and not replacement.startswith(

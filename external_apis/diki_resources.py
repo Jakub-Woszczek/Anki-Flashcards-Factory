@@ -20,9 +20,9 @@ import requests
 from bs4 import BeautifulSoup
 from urllib3.exceptions import ReadTimeoutError
 
+from backend.settings import data_path, diki_cache_directory
 from external_apis.diki_audio import DISCOVERY_VERSION, discover_audio_urls
 
-ROOT = Path(__file__).resolve().parent.parent
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 }
@@ -111,8 +111,7 @@ class DikiResources:
         if profile not in {"interactive", "background"}:
             raise ValueError("Unknown Diki fetch profile")
         self.profile = profile
-        configured = Path(root or os.getenv("DIKI_CACHE_DIR", "data/diki_cache")).expanduser()
-        self.root = configured if configured.is_absolute() else ROOT / configured
+        self.root = data_path(root) if root is not None else diki_cache_directory()
         self.offline = (
             os.getenv("DIKI_OFFLINE", "").lower() in {"1", "true", "yes"}
             if offline is None

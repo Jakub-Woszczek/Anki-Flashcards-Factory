@@ -1,6 +1,6 @@
 # Diki cache and background preparation
 
-Last updated: 2026-11-21.
+Last updated: 2026-11-22.
 
 Specification status: two purposes, bounded queue-buffer priority, and rolling
 snapshot retention confirmed. Exact buffer configuration/book selection and the
@@ -9,6 +9,13 @@ existing-note population mechanism remain to be designed.
 Implementation status: shared raw-HTML/audio caching, list-driven prefetch, strict
 offline mode, and coverage reporting exist. The current prefetch entry point
 does not discover vocabulary directly from existing Anki notes.
+
+Since 2026-11-22, cache paths are under `ANKI_FACTORY_DATA_DIR/diki_cache/`.
+Both HTML and MP3 snapshots, together with `index.sqlite3`, are deliberately
+versioned in the separate data repository. Browser/CLI/background defaults now
+share centralized paths; independent cache/list environment variables were retired.
+See [data storage and migration](data-storage.md). Resource selection, snapshot
+retention, and interactive/background request isolation remain unchanged.
 
 ## Purpose 1: process pending words offline
 

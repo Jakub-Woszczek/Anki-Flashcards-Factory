@@ -3,7 +3,7 @@ import threading
 import time
 import webbrowser
 
-from dotenv import load_dotenv
+from backend.settings import load_environment
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -17,7 +17,7 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    load_dotenv()
+    load_environment()
 
     if args.app:
         import uvicorn

@@ -62,23 +62,19 @@ VS Code nie sa zmieniane. Szczegoly: [Development and verification](docs/develop
 
 ### Ustawienia aplikacji
 
-Utworz `.env` w katalogu projektu:
+Utworz `.env` w katalogu **kodu** (przyklad: `.env.example`). Dane sa w osobnym
+repozytorium `Anki-Flashcards-Factory-data`, standardowo obok repozytorium kodu.
+Sklonuj je lub przygotuj istniejacy katalog danych, a nastepnie ustaw jedna sciezke:
 
 ```env
+# Wymagany, istniejacy katalog danych. Sciezka wzgledna jest wzgledem repo kodu.
+ANKI_FACTORY_DATA_DIR=../Anki-Flashcards-Factory-data
+
 # Domyslnie: http://127.0.0.1:8765
 ANKI_URL=http://127.0.0.1:8765
 
 # Opcjonalnie, dla pomocy Gemini
 GEMINI_API_KEY=
-
-# Opcjonalnie, domyslnie: data/anki_flashcards_factory.sqlite3
-ANKI_FACTORY_DB_PATH=data/anki_flashcards_factory.sqlite3
-
-# Opcjonalnie, wspolny cache HTML i MP3
-DIKI_CACHE_DIR=data/diki_cache
-
-# Opcjonalnie, folder list .txt (rowniez podfoldery)
-DIKI_WORDS_DIR=words_to_add
 
 # Bazowy odstep procesu tla; adaptacja moze go zwiekszyc po blokadzie.
 DIKI_BACKGROUND_INTERVAL_SECONDS=20
@@ -86,6 +82,14 @@ DIKI_BACKGROUND_INTERVAL_SECONDS=20
 # Losowy dodatek/odjecie od aktualnego odstepu procesu tla.
 DIKI_REQUEST_JITTER_SECONDS=5
 ```
+
+Wszystkie ponizsze sciezki `words_to_add/`, `diki_cache/`, `archives/` i `logs/`
+sa wzgledem katalogu danych. Brak ustawienia lub katalogu jest bledem konfiguracji;
+aplikacja nie tworzy drugiego zbioru w repo kodu. Usun stare `ANKI_FACTORY_DB_PATH`,
+`DATABASE_PATH`, `DIKI_CACHE_DIR` i `DIKI_WORDS_DIR` — nie sa juz obslugiwane.
+HTML, MP3, kolejki, obie bazy SQLite i celowe backupy sa wersjonowane w repo danych;
+logi, blokady i sekrety pozostaja ignorowane. Szczegoly i migracja:
+[Data storage and migration](docs/features/data-storage.md).
 
 ## Uruchomienie
 
@@ -163,7 +167,7 @@ Wyjscie przed rozstrzygnieciem slowa pozostawia je w pliku. Usunieto tez
 Historia pozostaje w lokalnej bazie SQLite: `note_index` zawiera powiazanie
 slowo → notatka, `word_saves` zapis oczekiwanej/odczytanej zawartosci i stan
 operacji, a `source_resolutions` dokladny usuniety wpis, wynik i dane do wznowienia.
-Kopia pliku sprzed zmiany trafia do `data/archives/source-<entry-id>.txt.bak`.
+Kopia pliku sprzed zmiany trafia do `archives/source-<entry-id>.txt.bak` w katalogu danych.
 Blokada wspolna z CLI chroni rownolegle dopisywane slowa. Identyfikator wpisu
 blokuje zadania ze starego widoku; porownanie pliku i trwale potwierdzenie usuniecia
 chronia kolejne identyczne wystapienie przy ponowieniu po awarii. Niejednoznaczna
@@ -196,7 +200,7 @@ jej operacje `already_in_anki`, nie zapisy biezacych zrodel ani review.
 
 Migracja Q-001 (2026-11-21): dopisano na koncu glownego pliku 25 zatwierdzonych slow
 obecnych tylko w starej kolejce SQLite, zachowano ustawienia celu i wycofano kopie
-kolejki. Lokalna kopia bazy: `data/archives/pre-q001-20261121.sqlite3`.
+kolejki. Lokalna kopia bazy: `archives/pre-q001-20261121.sqlite3` (obecnie w repo danych).
 
 ## Diki offline: HTML i MP3
 
@@ -296,20 +300,19 @@ list uzyj `--words-dir`. Normalny harmonogram powinien dzialac bez `--refresh`.
 
 ### Harmonogram macOS (launchd)
 
-Generator zapisuje plist z absolutna sciezka do **aktualnie uzywanego Pythona**
-i projektu. Uruchom go po aktywowaniu wlasciwego virtualenv:
+Generator zapisuje plist w `runtime/launchd/` katalogu danych z absolutna sciezka
+do **aktualnie uzywanego Pythona**, kodu i logow. Uruchom go po aktywowaniu
+wlasciwego virtualenv. `--install` kopiuje plist do LaunchAgents bez uruchamiania:
 
 ```bash
-python -m tools.diki_launchd
-mkdir -p "$HOME/Library/LaunchAgents"
-cp data/com.anki-flashcards-factory.diki-prefetch.plist "$HOME/Library/LaunchAgents/"
+python -m tools.diki_launchd --install
 launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/com.anki-flashcards-factory.diki-prefetch.plist"
 ```
 
-Agent uruchamia partie przy zalogowaniu i co 30 minut, niezaleznie od aplikacji.
+Po zaladowaniu agent uruchamia partie przy zalogowaniu i co 30 minut, niezaleznie od aplikacji.
 Nie budzi uspionego Maca. Nakladajace sie uruchomienia sa pomijane. Czyta `.env`
-z katalogu projektu; `DIKI_CACHE_DIR` i `DIKI_WORDS_DIR` sa wiec wspolne z aplikacja.
-Logi: `data/diki-prefetch.log` i `data/diki-prefetch-error.log`.
+z katalogu kodu; `ANKI_FACTORY_DATA_DIR` jest wspolne z aplikacja.
+Logi w katalogu danych: `logs/diki-prefetch.log` i `logs/diki-prefetch-error.log`.
 
 Zatrzymanie i usuniecie harmonogramu:
 
@@ -318,7 +321,7 @@ launchctl bootout "gui/$(id -u)" "$HOME/Library/LaunchAgents/com.anki-flashcards
 rm "$HOME/Library/LaunchAgents/com.anki-flashcards-factory.diki-prefetch.plist"
 ```
 
-Po przeniesieniu projektu lub zmianie virtualenv zatrzymaj agenta, wygeneruj
+Po przeniesieniu kodu/danych lub zmianie virtualenv zatrzymaj agenta, wygeneruj
 plik ponownie i zainstaluj go pod nowymi sciezkami.
 
 ### Praca bez internetu
@@ -352,9 +355,16 @@ integracyjnych (`RUN_LIVE_DIKI_TESTS=1` dla dwoch testow Diki).
 
 ## Dane lokalne
 
-- `data/anki_flashcards_factory.sqlite3` - indeks notatek i sesje.
-- `data/diki_cache/` - HTML, MP3 i osobna baza metadanych, odstepow i postepu pobierania.
-- `words_to_add/words_to_add.txt` - opcjonalna lista slow do zaimportowania w kolejnosci linii.
+Wszystkie sciezki sa wzgledem `ANKI_FACTORY_DATA_DIR`:
+
+- `anki_flashcards_factory.sqlite3` - indeks notatek, ustawienia, szkice i dzienniki odzyskiwania.
+- `diki_cache/` - wersjonowane HTML/MP3 i osobna baza metadanych, odstepow i postepu pobierania.
+- `words_to_add/words_to_add.txt` - glowna kolejka; inne pliki `.txt` sa kolejkami ksiazek.
+- `archives/`, `backups/` - celowe kopie zapasowe i historia migracji.
+
+Przed commitem zbioru danych lub zmiana jego rewizji Git zatrzymaj procesy zapisujace.
+Repo danych przechowuje SQLite jako snapshoty binarne razem z odpowiadajacymi plikami.
+Testowe HTML w `tests/diki_cases/` pozostaja z kodem; CI nie wymaga repo danych.
 
 Preprocessing `raw_notes/` / `prepared_notes/`, raw editor i opcja `--app -e`
 zostaly usuniete. Usunieto tez reczna obsluge indeksu przez `main.py --db`
@@ -362,8 +372,8 @@ oraz eksport MP3 bezposrednio do folderu mediow. Audio trafia do aktywnego profi
 Anki przez AnkiConnect; `ANKI_MEDIA_FOLDER_PATH` i `ANKI_BASE_DECK_PATH` nie sa
 juz uzywane. Szczegoly: [zakonczone wycofanie starszych sciezek](docs/features/maintenance-and-tooling.md#legacy-code-cleanup-and-obsolete-tests-t-001).
 
-Starszy indeks JSON ustawiony przez `DATABASE_PATH` jest jednokrotnie
-importowany do SQLite przy pierwszym uruchomieniu.
+Opcjonalny starszy indeks JSON mozna umiescic w `legacy/note_index.json` katalogu
+danych. Przy pustym indeksie SQLite zostanie zaimportowany z zachowaniem kopii `.bak`.
 
 ## Migracja kontraktow danych notatek (w toku)
 

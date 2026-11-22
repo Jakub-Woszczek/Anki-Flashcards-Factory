@@ -1,5 +1,36 @@
 # Approved implementation plan: offline Diki
 
+## Approved data-repository split — 2026-11-22
+
+The owner approved the researched chat plan, all durable data in the data repo,
+required `ANKI_FACTORY_DATA_DIR`, Git-versioned HTML/MP3 snapshots, deletion of the
+two deprecated temporary recordings, and implementation/documentation now.
+
+- [x] Centralize lazy paths in `backend/settings.py`; load code-local `.env` at
+  entry points. Replace per-component path environment settings, preserve explicit
+  test/CLI overrides, and keep code/build/test-fixture paths code-local.
+- [x] Update browser stores, resource/list providers, capture/prefetch/cleanup,
+  relative archive references, launchd paths, and frontend guidance.
+- [x] Add an explicit offline migration tool: no destination overwrite, consistent
+  SQLite snapshots, pending-operation preflight, SHA-256 manifest, relative active
+  backup references, source retirement only after destination validation.
+- [x] Migrate current queue bytes and durable files, update local `.env`, delete
+  deprecated MP3s, and regenerate/install the scheduler without a live download.
+- [x] Document the implemented layout, data Git policy, migration evidence, and ADR.
+- [x] Verify relocation and consumer agreement with temporary stores/fake transports,
+  run `python -m tools.check`, and verify both Git worktrees and migration hashes.
+
+Rollback uses the manifest's copied-file mapping and retained original SQLite snapshot;
+account for post-cutover writes before restoring. No Anki collection operation or
+live Diki verification is part of this work. The data repository is a directory
+dependency, not a submodule or runtime Git integration.
+
+Completed: full quality check passed (47 formatted Python files, zero Pyright
+errors/warnings, 163 tests with 2 live checks skipped, frontend TypeScript/build).
+Migration verified 1,497 files/snapshots and all cached resource digests/sizes;
+data Git index includes durable HTML/MP3 and excludes local credentials/runtime files.
+Detailed evidence lives in `docs/features/data-storage.md`.
+
 ## Approved Q-001 implementation — 2026-11-21
 
 Owner approved implementation after refining the plan in conversation. Historical

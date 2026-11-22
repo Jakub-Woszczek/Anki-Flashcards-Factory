@@ -1,5 +1,37 @@
 # Offline Diki research
 
+## Data-repository separation research — 2026-11-22
+
+Approved for implementation after the owner reviewed the migration plan in chat.
+The owner also approved deleting the two deprecated `external_apis/tmp/` MP3s.
+
+- `backend/settings.py:12-34` resolves the database and main queue inside the code
+  checkout. `tools/diki_lookup.py:22` independently hard-codes the queue.
+- `external_apis/diki_resources.py:114-115` and `diki_lists.py:19-21` independently
+  resolve cache/list environment overrides. This can split browser and prefetch data.
+- `backend/storage.py:385-403` and `word_completion.py:314-324` store absolute
+  archive references. Source workspace names and save-entry associations are relative.
+- The active database contains 11 consumed source receipts and no prepared receipts;
+  copying an unfinished removal would require special care because recovery also
+  checks filesystem identity. Recheck before migration and refuse unfinished removal.
+- Durable inventory: two queues; 1,037 cached HTML files; 437 cached MP3s; application
+  and cache SQLite databases; 14 archive files; root `Backup.apkg`. Logs, generated
+  plists, locks, and relay credentials are local-only. Fixture HTML stays with code.
+- The installed launchd plist references a missing previous checkout. No backend or
+  prefetch process was found and the launchd service was not loaded at preflight.
+
+```text
+code/.env -> ANKI_FACTORY_DATA_DIR -> external data repository
+                                     |- queues, SQLite, HTML/MP3, archives/backups
+                                     `- ignored logs, runtime files, local credentials
+```
+
+Use lazy centralized paths, one required root, stable relative source identities,
+relative archive references, consistent entry-point dotenv loading, and isolated
+temporary test roots. SHA-256 verifies copies; no credentials enter version control
+and no network transport/certificate behavior changes. Current contracts/ADRs remain
+authoritative over the historical research below.
+
 ## Q-001 research — 2026-11-21
 
 The sections below retain historical offline-cache research. Current queue findings:

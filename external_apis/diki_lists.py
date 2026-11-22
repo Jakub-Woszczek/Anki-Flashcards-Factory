@@ -1,10 +1,9 @@
 """Word-list discovery and disk-only offline coverage, without Anki dependencies."""
 
-import os
 from dataclasses import dataclass
-from pathlib import Path
 
-from external_apis.diki_resources import ROOT, DikiResources, normalize_word
+from backend.settings import data_path, words_directory
+from external_apis.diki_resources import DikiResources, normalize_word
 
 
 @dataclass
@@ -17,8 +16,7 @@ class WordList:
 
 
 def discover_lists(directory=None) -> list[WordList]:
-    root = Path(directory or os.getenv("DIKI_WORDS_DIR", "words_to_add")).expanduser()
-    root = (root if root.is_absolute() else ROOT / root).resolve()
+    root = (data_path(directory) if directory is not None else words_directory()).resolve()
     paths = sorted(
         root.rglob("*.txt"),
         key=lambda path: (

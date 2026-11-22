@@ -28,6 +28,7 @@ dist/
 .pypirc
 !.env.example
 data/
+words_to_add/
 db/
 *.apkg
 *.sqlite3

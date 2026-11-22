@@ -1,6 +1,6 @@
 # Project purpose and scope
 
-Last updated: 2026-11-21.
+Last updated: 2026-11-22.
 
 Status: foundation confirmed by the owner during the handbook walkthrough.
 Detailed feature and integration rules remain under discussion. See the
@@ -121,6 +121,11 @@ scheduler fit that target. See [architecture](architecture.md) for the component
 map and the distinction between intended state ownership and current mismatches.
 
 ## Two main vocabulary sources
+
+Source paths below are relative to the separate directory selected by
+`ANKI_FACTORY_DATA_DIR`. Code and durable personal data were split on 2026-11-22;
+the data repository versions queues, cached HTML/MP3, SQLite, and deliberate backups.
+See [data placement](features/data-storage.md) and [ADR 0006](decisions/0006-separate-data-root.md).
 
 ### Everyday discoveries
 

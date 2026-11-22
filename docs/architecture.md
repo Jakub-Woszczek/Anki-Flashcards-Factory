@@ -1,6 +1,6 @@
 # Architecture and operating constraints
 
-Last updated: 2026-11-21.
+Last updated: 2026-11-22.
 
 Status: owner-confirmed deployment/scope and state-ownership decisions, with a
 source-inspected component map. This is not a claim that every path has been
@@ -51,6 +51,18 @@ Key locations: `main.py`, `backend/app.py`, `backend/services.py`,
 lives in `backend/note_index.py`; `main.py` remains the root browser launcher.
 Integration and test module names use snake_case. Module moves preserve project-root
 resolution, CLI commands, resource paths, and collection contracts.
+
+### Code and data roots
+
+The code checkout owns `.env`, Python/frontend sources, built frontend serving,
+quality configuration, and controlled test fixtures. One required setting,
+`ANKI_FACTORY_DATA_DIR`, locates the separate durable dataset. Relative roots use
+the code checkout, not the working directory. Shared lazy helpers in
+`backend/settings.py` supply database, word-list, cache, log, and scheduler paths;
+normal data access has no code-local fallback or per-component path environment
+override. HTML/MP3, queues, SQLite, and deliberate backups are versioned in the
+data repository; runtime files and credentials are ignored. See
+[data storage](features/data-storage.md) and [ADR 0006](decisions/0006-separate-data-root.md).
 
 ### Retired legacy workflows
 

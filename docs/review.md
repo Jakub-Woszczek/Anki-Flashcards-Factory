@@ -2,6 +2,19 @@
 
 Last updated: 2026-11-22.
 
+## Post-walkthrough code/data split — 2026-11-22
+
+The owner approved separating durable data into `Anki-Flashcards-Factory-data`,
+versioning all durable content including HTML/MP3 and SQLite, and requiring one
+`ANKI_FACTORY_DATA_DIR` setting. Centralized paths now serve browser, CLI, downloader,
+coverage, and cleanup. The current queues and cached resources were copied and
+verified before original retirement; the two deprecated temporary recordings were
+deleted with explicit approval. Stored operational archive references are relative.
+The scheduler plist was corrected and installed without loading or live downloads.
+See [implementation and migration evidence](features/data-storage.md) and
+[ADR 0006](decisions/0006-separate-data-root.md). This is completed implementation,
+not a new loose thought or a restart of the baseline interview.
+
 ## Documentation organization update — 2026-11-22
 
 The owner requested separating loose thoughts from implemented work. The former

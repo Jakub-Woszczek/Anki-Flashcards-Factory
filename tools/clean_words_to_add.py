@@ -4,9 +4,7 @@ import argparse
 import json
 import sqlite3
 
-from dotenv import load_dotenv
-
-from backend.settings import ROOT_DIR, configured_words_to_add_path
+from backend.settings import configured_words_to_add_path, load_environment
 from backend.word_completion import VerificationError, WordCompletion, field_word
 from backend.word_list import normalize_word
 from external_apis.anki_connect import AnkiConnect
@@ -91,7 +89,7 @@ def matching_notes(anki, words):
 
 
 def main():
-    load_dotenv(ROOT_DIR / ".env")
+    load_environment()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--apply", action="store_true", help="Archive and remove verified words")
     parser.add_argument(

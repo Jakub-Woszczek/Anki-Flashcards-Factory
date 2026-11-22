@@ -400,7 +400,7 @@ class SessionStore:
                                 fingerprint(replacement),
                                 len(replacement),
                                 file_identity(path),
-                                str(backup),
+                                backup.relative_to(self.path.parent).as_posix(),
                                 start,
                                 end,
                                 content[start:end],

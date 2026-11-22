@@ -73,7 +73,7 @@ export function OfflineDownloads() {
   return <section className="panel offline-panel" aria-label="Offline downloads">
     <div className="panel__heading">
       <div><p className="eyebrow">LOCAL DICTIONARY CACHE</p><h2>Offline downloads</h2>
-        <p>Lists in <code>words_to_add/</code>, including book subfolders. Shared words download once.</p></div>
+        <p>Lists in <code>words_to_add/</code> under your configured data directory, including book subfolders. Shared words download once.</p></div>
       <button className="tiny-button" type="button" disabled={loading} onClick={() => setRefreshKey((key) => key + 1)}>{loading ? 'Reading…' : 'Refresh coverage'}</button>
     </div>
     {error ? <div className="inline-error">{error}</div> : null}

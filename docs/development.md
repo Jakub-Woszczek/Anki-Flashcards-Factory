@@ -1,6 +1,6 @@
 # Development and verification
 
-Last updated: 2026-11-21.
+Last updated: 2026-11-22.
 
 Status: default test boundary confirmed by the owner in interview batch 21.
 Legacy live tests were retired on 2026-11-19 and current discovery passes offline.
@@ -94,6 +94,19 @@ its prior rendering behavior: no fallback was specified, so the rendering argume
 has a documented local type-check exception rather than an invented behavior change.
 
 ## Routine automated tests — accepted boundary
+
+Since the 2026-11-22 code/data split, the guarded runner also gives discovery and
+tests a temporary `ANKI_FACTORY_DATA_DIR`, blanking retired inherited path variables.
+Controlled Diki HTML stays in `tests/diki_cases/`. CI and routine checks need neither
+the personal data repository nor its `.env`; explicit test stores remain temporary.
+Data-root, migration, and relocation regressions cover shared consumer defaults,
+byte-preserving migration, resource metadata, relative backup references, pending
+operation/conflict rejection, and scheduler paths. See [data storage](features/data-storage.md).
+
+The data-split full check passed on 2026-11-22: Ruff lint/format (47 Python files),
+Pyright with zero errors/warnings, 163 tests run (161 passed, 2 live checks skipped),
+and frontend TypeScript/Vite build. Migration separately verified 1,497 copied/
+snapshot files and each cached HTML/MP3 against its SQLite digest and size.
 
 - Run offline using saved Diki HTML/fixtures and fake Anki responses.
 - Do not contact the real Anki application, even for read-only inspection.

@@ -1,6 +1,6 @@
 # Vocabulary sources and queue lifecycle
 
-Last updated: 2026-11-21.
+Last updated: 2026-11-22.
 
 Status: file-backed processing implemented as `Q-001`. The owner approved the
 implementation and the UI simplifications below after the handbook walkthrough.
@@ -21,6 +21,11 @@ not an untouched archive of all original Kindle highlights.
   consuming it preserves the other original bytes.
 - File discovery accepts only files resolved inside the source directory; aliases
   to the same resolved file share one workspace. Outside symlinks are excluded.
+
+These paths are relative to `ANKI_FACTORY_DATA_DIR`, not the code checkout. Since
+2026-11-22, browser processing, CLI capture, prefetch, and coverage use the same
+centralized directory defaults. Queues are versioned in the separate data repository.
+See [data placement and migration](data-storage.md).
 
 See [project purpose](../project.md), [ADR 0002](../decisions/0002-per-entry-vocabulary-resolution.md),
 and [ADR 0004](../decisions/0004-file-backed-word-queues.md).
@@ -113,7 +118,7 @@ current entry's identity, byte range, and source fingerprint, not the word queue
 - Other observed content edits invalidate the entry reference and draft. Reload
   the source before continuing; the app does not guess which changed line to remove.
 - Every consumption archives the exact removed line and a pre-removal file backup
-  under `data/archives/source-<entry-id>.txt.bak`. A durable `source_resolutions`
+  under `archives/source-<entry-id>.txt.bak` in the data directory. A durable `source_resolutions`
   receipt links the source workspace, entry, outcome, and Anki save where applicable.
 - Before/after hashes, sizes, and file identity allow retry across the file-write /
   SQLite-commit boundary without consuming a second occurrence. An ambiguous
@@ -152,7 +157,8 @@ from the main file were appended at the end in queue order. A second comparison
 found no remaining SQLite-only entries. Main-file pending count became 645;
 Fablehaven had 682. Counts are a migration snapshot, not fixed expectations.
 
-The local database was backed up to `data/archives/pre-q001-20261121.sqlite3`.
+The local database was backed up to `data/archives/pre-q001-20261121.sqlite3`
+(moved unchanged to data-root `archives/` in the later data split).
 Migration reused the main source's existing target settings, cleared its old draft,
 and retired its copied queue rows. Older review metadata is inactive history.
 No source entries were consumed and no live Anki/Diki requests were made during

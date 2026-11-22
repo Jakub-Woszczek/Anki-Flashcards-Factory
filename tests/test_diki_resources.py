@@ -1,4 +1,5 @@
 import io
+import os
 import tempfile
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -10,6 +11,7 @@ from unittest.mock import Mock, patch
 import requests
 
 from backend.services import FactoryService, ServiceError
+from backend.settings import RETIRED_PATH_VARIABLES
 from external_apis.diki_api import DikiApi
 from external_apis.diki_lists import WordList, coverage, discover_lists
 from external_apis.diki_resources import (
@@ -466,8 +468,15 @@ class TestDikiResources(TestCase):
         self.get.assert_not_called()
 
     def test_launchd_configuration_is_independent_and_bounded(self):
-        config = configuration()
+        with patch.dict(
+            os.environ,
+            {"ANKI_FACTORY_DATA_DIR": str(self.root), **dict.fromkeys(RETIRED_PATH_VARIABLES, "")},
+        ):
+            config = configuration()
         self.assertTrue(Path(config["ProgramArguments"][0]).is_absolute())
+        self.assertEqual(
+            config["StandardOutPath"], str(self.root.resolve() / "logs/diki-prefetch.log")
+        )
         self.assertEqual(config["StartInterval"], 1800)
         self.assertTrue(config["RunAtLoad"])
         self.assertIn("tools.diki_prefetch", config["ProgramArguments"])

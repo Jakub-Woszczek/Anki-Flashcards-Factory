@@ -4,11 +4,9 @@ import argparse
 import json
 import time
 
-from dotenv import load_dotenv
-
+from backend.settings import load_environment
 from external_apis.diki_lists import coverage, discover_lists
 from external_apis.diki_resources import (
-    ROOT,
     BatchDeadline,
     Blocked,
     Deferred,
@@ -147,7 +145,7 @@ def _download_batch(resources, lists, summary, batch_size, refresh):
 
 
 def main(argv=None):
-    load_dotenv(ROOT / ".env")
+    load_environment()
     parser = argparse.ArgumentParser(description="Cache Diki HTML and MP3s for all word lists")
     parser.add_argument("--batch-size", type=int, default=25)
     parser.add_argument(
@@ -157,7 +155,7 @@ def main(argv=None):
         "--words-dir", help="Folder of .txt lists (recursive); main list takes priority"
     )
     parser.add_argument(
-        "--cache-dir", help="Shared cache directory, also configurable with DIKI_CACHE_DIR"
+        "--cache-dir", help="Explicit cache directory (relative paths use the data root)"
     )
     parser.add_argument(
         "--refresh",

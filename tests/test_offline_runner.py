@@ -4,6 +4,7 @@ import io
 import os
 import socket
 import unittest
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 from tools.test_offline import main
@@ -16,6 +17,9 @@ class TestOfflineRunner(unittest.TestCase):
         def probe():
             self.assertEqual(os.environ["RUN_LIVE_DIKI_TESTS"], "0")
             self.assertEqual(os.environ["DIKI_OFFLINE"], "0")
+            sandbox = Path(os.environ["ANKI_FACTORY_DATA_DIR"])
+            self.assertTrue(sandbox.is_dir())
+            self.assertIn("anki-factory-tests-", sandbox.name)
             with socket.socket() as client:
                 with self.assertRaisesRegex(AssertionError, "Live network"):
                     client.connect(("127.0.0.1", 8765))

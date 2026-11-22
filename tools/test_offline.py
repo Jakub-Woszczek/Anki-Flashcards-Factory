@@ -2,16 +2,26 @@
 
 import os
 import socket
+import tempfile
 import unittest
 from unittest.mock import patch
 
-from backend.settings import ROOT_DIR
+from backend.settings import RETIRED_PATH_VARIABLES, ROOT_DIR
 
 
 def main() -> int:
     # Do not load .env or set DIKI_OFFLINE: fake HTTP must still exercise fetching.
     with (
-        patch.dict(os.environ, {"RUN_LIVE_DIKI_TESTS": "0", "DIKI_OFFLINE": "0"}),
+        tempfile.TemporaryDirectory(prefix="anki-factory-tests-") as directory,
+        patch.dict(
+            os.environ,
+            {
+                "RUN_LIVE_DIKI_TESTS": "0",
+                "DIKI_OFFLINE": "0",
+                "ANKI_FACTORY_DATA_DIR": directory,
+                **dict.fromkeys(RETIRED_PATH_VARIABLES, ""),
+            },
+        ),
         patch.object(
             socket.socket,
             "connect",

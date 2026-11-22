@@ -351,7 +351,7 @@ export default function App() {
                 </div>
               ))}
             </div>
-          ) : <EmptyState title="No source files found" text="Keep the main vocabulary and book .txt files in words_to_add/. Refresh after adding a file." />}
+          ) : <EmptyState title="No source files found" text="Keep the main vocabulary and book .txt files in words_to_add/ under your configured data directory. Refresh after adding a file." />}
         </article>
       </section>
 

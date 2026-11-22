@@ -3,23 +3,20 @@ import os
 import signal
 import sys
 from contextlib import contextmanager
-from pathlib import Path
 
 # Allow importing from project root regardless of where the script is called from
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from dotenv import load_dotenv
 from rich.console import Console
 from rich.padding import Padding
 from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
 
+from backend.settings import configured_words_to_add_path, load_environment
 from backend.word_list import append_word
 from external_apis.diki_api import DikiApi
-from external_apis.diki_resources import ROOT, DikiResources, DikiTimeout, ResourceError
-
-WORDS_FILE = os.path.join(os.path.dirname(__file__), "..", "words_to_add", "words_to_add.txt")
+from external_apis.diki_resources import DikiResources, DikiTimeout, ResourceError
 
 console = Console()
 LOOKUP_TIMEOUT = 30
@@ -82,7 +79,7 @@ def display_meanings(word, meanings):
 
 def load_existing_words():
     try:
-        with open(WORDS_FILE) as f:
+        with configured_words_to_add_path().open(encoding="utf-8-sig") as f:
             return {" ".join(line.split()) for line in f if line.strip()}
     except FileNotFoundError:
         return set()
@@ -98,7 +95,7 @@ def ask_save(word):
         print()
         return
     if answer == "y":
-        if append_word(Path(WORDS_FILE), word):
+        if append_word(configured_words_to_add_path(), word):
             console.print("[green]✓[/green] Appended to words_to_add.txt")
         else:
             console.print(f"[yellow]'{word}' is already in words_to_add.txt[/yellow]")
@@ -126,7 +123,7 @@ def main():
         sys.exit(1)
 
     phrase = " ".join(sys.argv[1:]).strip()
-    load_dotenv(ROOT / ".env")
+    load_environment()
     with DikiResources(profile="interactive") as resources:
         return run_lookup(DikiApi(resources), phrase)
 

@@ -17,6 +17,7 @@ tested. Specification status and implementation status are separate.
 | Tag/flag review | Revisit items marked during study for later editing, deleting, or reconsideration | Present; red/orange both mean attention needed. Exact completion behavior remains open. [Feature](features/marked-note-review.md) |
 | LLM assistance | Quickly understand words and disparate Polish alternatives | Present via optional Gemini integration; purpose confirmed. [Feature](features/llm-assistance.md) |
 | Resource cache and prefetch | Offline additions plus reusable source data for old-note checks | Present, list-driven. Two goals and snapshot policy confirmed; existing-note coverage/buffer planner remains a gap. [Feature](features/offline-cache.md) |
+| Separate code/data storage | Keep mutable vocabulary, resources, and recovery data out of code commits | Implemented: one required `ANKI_FACTORY_DATA_DIR`; durable data including HTML/MP3 and SQLite is versioned separately. [Layout and migration](features/data-storage.md) |
 | Pronunciation audio | Obtain relevant-word audio; either dialect acceptable | Present. British-first is historical fallback, not a hard preference. [Diki contract](contracts/diki.md#pronunciation-audio) |
 | Field-contract audit | Incrementally establish predictable stored content for future refinement | Present; only `en_word` syntax currently defined/audited. [Field contracts](../note-data-contracts.md) |
 | Image candidate marking | Mark words that might later suit image cards | Present as `IMAGE`; partial evaluation coverage. Full authoring/migration is deferred |
@@ -39,6 +40,7 @@ Contracts and ADRs retain ownership of detailed rules and decisions.
 
 | Completed | Change | Documentation |
 | --- | --- | --- |
+| 2026-11-22 | Separated and migrated durable data, centralized paths, retired deprecated temporary audio, and regenerated scheduler configuration | [Data storage](features/data-storage.md), [ADR 0006](decisions/0006-separate-data-root.md) |
 | 2026-11-19 | Retired whole-list preprocessing (`L-001`), obsolete live tests (`T-001`), and other approved legacy paths | [Maintenance and retired workflows](features/maintenance-and-tooling.md) |
 | 2026-11-19 | Enforced offline checks (`T-002`) and added repository quality tooling | [Tooling feature](features/maintenance-and-tooling.md#enforced-offline-test-boundary-t-002), [verification guide](development.md) |
 | 2026-11-21 | Live source queues (`Q-001`), source-only discard, and existing-note UX simplification | [Vocabulary queues](features/vocabulary-queues.md) |
