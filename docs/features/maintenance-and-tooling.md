@@ -93,3 +93,21 @@ the roadmap. The roadmap provides future-work context. The handbook index and
 `AGENTS.md` establish the ongoing rule: document completion in the relevant
 feature page, then remove the pending thought. Contracts and ADRs continue to
 own detailed rules and decisions.
+
+## Translation editor extraction
+
+Completed 2026-11-22. Translation selection/editing was introduced inline in
+`App.tsx` by browser-workspace commit `6437e8c`. The later Q-001 plan explicitly
+preserved the owner's uncommitted `TranslationEditor` extraction; it is a
+standalone frontend refactor rather than missing Q-001 functionality.
+
+`frontend/src/TranslationEditor.tsx` now owns the meaning-group controls and local
+editing state. `App.tsx` still owns the draft and existing debounced persistence:
+typing updates local draft text, while selection, confirmation, reset, and custom
+addition schedule persistence. Editing and custom translations remain available.
+The component adds accessible input labels and disabled fieldsets, and its
+current-entry key resets editing state when moving to another queue entry.
+
+Verification: `python -m tools.check` passed Ruff lint/format, Pyright with zero
+errors/warnings, 156 tests (2 opt-in live checks skipped), and frontend
+TypeScript/production build. No live Anki/Diki checks were run.

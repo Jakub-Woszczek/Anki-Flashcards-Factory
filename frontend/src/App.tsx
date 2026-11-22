@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { ApiError, api } from './api'
 import { OfflineDownloads } from './OfflineDownloads'
+import { TranslationEditor } from './TranslationEditor'
 import type {
   Draft,
   DeckContext,
@@ -599,7 +600,6 @@ function Workspace({ sessionId, review, onExit }: { sessionId?: string; review?:
   const [previewing, setPreviewing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
-  const [editingKey, setEditingKey] = useState<string | null>(null)
   const [pendingRemoval, setPendingRemoval] = useState<SaveResult | null>(null)
   const [suggestionInput, setSuggestionInput] = useState('')
   const [customTag, setCustomTag] = useState('')
@@ -898,35 +898,6 @@ function Workspace({ sessionId, review, onExit }: { sessionId?: string; review?:
     draftTimer.current = window.setTimeout(() => {
       void persistDraft(nextDraft, true).catch((requestError) => setError(errorMessage(requestError)))
     }, 550)
-  }
-
-  function updateTranslation(groupIndex: number, translationIndex: number, update: Partial<Translation>) {
-    if (!draft) return
-    const groups = (draft.groups ?? []).map((group, currentGroupIndex) => group.map((translation, currentTranslationIndex) => (
-      currentGroupIndex === groupIndex && currentTranslationIndex === translationIndex ? { ...translation, ...update } : translation
-    )))
-    scheduleDraft({ ...draft, groups })
-  }
-
-  function editTranslationValue(groupIndex: number, translationIndex: number, value: string) {
-    if (!draft) return
-    const groups = (draft.groups ?? []).map((group, currentGroupIndex) => group.map((translation, currentTranslationIndex) => (
-      currentGroupIndex === groupIndex && currentTranslationIndex === translationIndex ? { ...translation, value } : translation
-    )))
-    setDraft({ ...draft, groups })
-  }
-
-  function confirmTranslationEdit() {
-    if (!draft) return
-    scheduleDraft(draft)
-    setEditingKey(null)
-  }
-
-  function addTranslation() {
-    if (!draft) return
-    const groups = [...(draft.groups ?? []), [{ original: '', value: '', selected: true }]]
-    scheduleDraft({ ...draft, groups })
-    setEditingKey(`${groups.length - 1}-0`)
   }
 
   function addTag(value: string) {
@@ -1340,16 +1311,11 @@ function Workspace({ sessionId, review, onExit }: { sessionId?: string; review?:
 
               {cardReady ? <><section className="panel translations-panel">
                 <div className="panel__heading"><div><h2>Meanings from Diki</h2></div><div className="translation-heading-actions">{session.mode === 'review' ? <button className="tiny-button" type="button" disabled={!draft?.word} onClick={() => void lookupCurrent(draft?.word)}>Refresh Diki</button> : null}<span className="counter-badge">{selectedGroups(draft).flat().length} selected</span></div></div>
-                <div className="translation-groups">
-                  {(draft?.groups ?? []).map((group, groupIndex) => <fieldset className="translation-group" key={`group-${groupIndex}`}><legend>Sense {String(groupIndex + 1).padStart(2, '0')}</legend>{group.map((translation, translationIndex) => {
-                    const key = `${groupIndex}-${translationIndex}`
-                    const editing = editingKey === key
-                    const modified = !translation.isBreak && translation.original !== translation.value
-                    return <div className={`translation-row ${translation.isBreak ? 'translation-row--break' : ''} ${translation.selected ? 'translation-row--selected' : ''}`} key={key}><label className="translation-toggle"><input type="checkbox" checked={translation.selected} onChange={(event) => updateTranslation(groupIndex, translationIndex, { selected: event.target.checked })} /><span /></label><div className="translation-value">{editing ? <input autoFocus value={translation.value} onChange={(event) => editTranslationValue(groupIndex, translationIndex, event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') confirmTranslationEdit() }} /> : <span>{translation.isBreak ? '<br>' : translation.value || 'Untitled translation'}</span>}</div><div className="translation-actions">{!translation.isBreak ? <>{editing ? <button className="translation-icon-button translation-icon-button--confirm" type="button" aria-label="Confirm edit" title="Confirm edit" onClick={confirmTranslationEdit}>&#10003;</button> : <button className="translation-icon-button" type="button" aria-label="Edit translation" title="Edit translation" onClick={() => setEditingKey(key)}>&#9998;</button>}{modified ? <button className="translation-icon-button translation-icon-button--reset" type="button" aria-label="Reset to Diki" title="Reset to Diki" onClick={() => updateTranslation(groupIndex, translationIndex, { value: translation.original })}>&#8634;</button> : null}</> : null}</div></div>
-                  })}</fieldset>)}
-                </div>
-                {!draft?.groups?.length ? <EmptyState title="No translations loaded" text={session.mode === 'review' ? 'Create a translation below or use the existing card fields as your starting point.' : 'Choose a spelling, then look it up again. You may also create a custom translation.'} /> : null}
-                <button className="button button--ghost add-translation" type="button" disabled={!draft} onClick={addTranslation}>New custom translation</button>
+                <TranslationEditor key={session.current?.id} groups={draft?.groups ?? []} disabled={!draft} emptyText={session.mode === 'review' ? 'Create a translation below or use the existing card fields as your starting point.' : 'Choose a spelling, then look it up again. You may also create a custom translation.'} onChange={(groups, persist = true) => {
+                  if (!draft) return
+                  if (persist) scheduleDraft({ ...draft, groups })
+                  else setDraft({ ...draft, groups })
+                }} />
               </section>
 
               <section className="panel tags-panel">

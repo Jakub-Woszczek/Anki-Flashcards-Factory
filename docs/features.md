@@ -45,6 +45,7 @@ Contracts and ADRs retain ownership of detailed rules and decisions.
 | 2026-11-21 | Fixed Basel/lead-astray resolution and preserved meaningful casing | [Diki contract](contracts/diki.md#resolution-and-case--accepted-2026-11-21), [ADR 0005](decisions/0005-diki-headwords-and-case.md) |
 | 2026-11-21 | Continued after acknowledged creation with unavailable confirmation (`S-001`), with local-only queue-removal retry | [Save completion](contracts/anki.md#acknowledged-creation-with-failed-follow-up-confirmation), [queue workflow](features/vocabulary-queues.md#save-confirmation) |
 | 2026-11-22 | Separated loose todo thoughts from completed feature records and established documentation ownership rules | [Handbook organization](features/maintenance-and-tooling.md#handbook-and-todo-organization) |
+| 2026-11-22 | Extracted the translation editor from the workspace, retaining editing/custom translations and draft persistence | [Frontend refactor](features/maintenance-and-tooling.md#translation-editor-extraction) |
 
 On 2026-11-21, `Q-001` replaced SQLite word snapshots with live source queues.
 Discard replaces skip/keep-existing; duplicate-note deletion was retired in favor
