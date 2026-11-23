@@ -19,8 +19,11 @@ runtime-verified or that current code fully implements the intended model.
 
 The optional [Northflank dictionary worker](features/remote-downloads.md), restored
 at the owner's request on 2026-11-22, moves only dictionary preparation off the Mac.
-It owns a separate durable job/outbox volume; explicit submit/pull commands connect
-it to the local cache. Application and Anki state remain local.
+It owns a separate durable job/outbox volume; manual commands and an optional
+application-lifespan coordinator connect it to the local cache. The coordinator
+submits bounded buffers/HTML coverage and drains one ready snapshot at startup,
+immediately importing/ACKing each batch in background. Application and Anki state
+remain local; see [ADR 0009](decisions/0009-remote-preparation-scheduling.md).
 
 The owner confirmed this setup in interview batch 17. See
 [project scope](project.md) and [ADR 0001](decisions/0001-personal-workbench-scope.md).
@@ -130,7 +133,9 @@ consumption without calling Anki, including after a restart.
   then Anki/index candidates are checked against it. Case-distinct dictionary
   meanings/resources remain separate; see [ADR 0005](decisions/0005-diki-headwords-and-case.md).
 - Custom/edited Polish text remains possible; selection-only is a tentative decision.
-- Prefetch discovers text lists, without the intended bounded-buffer-to-existing-note preparation tier.
+- Local standalone prefetch remains list-driven. The remote coordinator implements
+  bounded buffers and the one-time existing-note HTML tier; full population and
+  deployment of the scheduling-capable worker are separate operational steps.
 - Acknowledged-create confirmation-fetch failures warn and continue (`S-001`);
   source-removal failures expose a local-only retry with precise error feedback.
 - Detailed review-completion mechanics and some failure/preservation rules still need owner input.

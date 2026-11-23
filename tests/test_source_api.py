@@ -24,6 +24,7 @@ class TestSourceAPI(TestCase):
         self.service: Any = FactoryService.__new__(FactoryService)
         self.service.sessions = SessionStore(root / "test.sqlite3", root)
         self.service.anki = Mock()
+        self.service.remote_preparation = Mock()
         self.session = self.service.session(self.service.list_sessions()[0]["id"])
         # Import actual routes without constructing real integrations or personal stores.
         with patch("backend.services.FactoryService", return_value=self.service):
@@ -82,6 +83,17 @@ class TestSourceAPI(TestCase):
         self.assertEqual(self.request("POST", path, body)[0], 409)
         self.assertEqual(self.words.read_bytes(), b"same\n")
         self.assertEqual(self.service.anki.mock_calls, [])
+        self.service.remote_preparation.notify.assert_called_once_with()
+
+    def test_node_health_has_a_separate_route_without_anki_or_scheduler_actions(self):
+        expected = {"configured": True, "healthy": True, "message": "Node API is online."}
+        with patch.object(self.routes, "check_remote_node", return_value=expected) as probe:
+            status, result = self.request("GET", "/backend/remote-node/health")
+        self.assertEqual(status, 200)
+        self.assertEqual(result, expected)
+        probe.assert_called_once_with()
+        self.assertEqual(self.service.anki.mock_calls, [])
+        self.assertEqual(self.service.remote_preparation.mock_calls, [])
 
     def test_home_counts_are_live_and_retired_mutation_routes_are_unavailable(self):
         self.words.write_bytes(b"same\nsame\nnew\n")
@@ -141,6 +153,7 @@ class TestSourceAPI(TestCase):
         self.assertIn("notesInfo", result["confirmationWarning"])
         self.assertIn("disk full", result["cleanupWarning"])
         self.assertEqual(self.words.read_bytes(), b"same\nsame\n")
+        self.service.remote_preparation.notify.assert_not_called()
         self.service.anki = Mock()
         status, reopened = self.request("GET", base)
         self.assertEqual(status, 200)
@@ -152,3 +165,27 @@ class TestSourceAPI(TestCase):
         self.assertEqual(self.words.read_bytes(), b"same\n")
         self.assertEqual(self.request("POST", retry, body)[0], 409)
         self.assertEqual(self.service.anki.mock_calls, [])
+        self.service.remote_preparation.notify.assert_called_once_with()
+
+    def test_application_lifespan_owns_one_scheduler_and_closes_it_before_integrations(self):
+        preparation = Mock()
+        self.service.diki = Mock()
+        self.service.flush_sync = Mock()
+
+        async def lifecycle():
+            with (
+                patch.object(self.routes, "service", self.service),
+                patch.object(
+                    self.routes.RemotePreparation, "from_environment", return_value=preparation
+                ) as configure,
+            ):
+                async with self.routes.lifespan(self.routes.app):
+                    self.assertIs(self.service.remote_preparation, preparation)
+                    preparation.start.assert_called_once_with()
+                    preparation.close.assert_not_called()
+                configure.assert_called_once_with(self.service.diki.resources.root)
+            preparation.close.assert_called_once_with()
+            self.service.diki.resources.close.assert_called_once_with()
+            self.assertIsNone(self.service.remote_preparation)
+
+        asyncio.run(lifecycle())

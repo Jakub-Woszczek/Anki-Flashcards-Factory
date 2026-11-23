@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { ApiError, api } from './api'
 import { OfflineDownloads } from './OfflineDownloads'
+import { NodeHealth } from './NodeHealth'
 import { TranslationEditor } from './TranslationEditor'
 import type {
   Draft,
@@ -321,6 +322,7 @@ export default function App() {
           <div className="topbar__status">
             <StatusPill active={Boolean(status?.ankiAvailable)} label={status?.ankiAvailable ? 'Anki' : 'Open Anki'} />
             <StatusPill active={Boolean(status?.geminiConfigured)} label="Gemini" />
+            <NodeHealth />
             <button className="tiny-button" type="button" onClick={() => void stopApp()} disabled={stoppingApp}>{stoppingApp ? 'Stopping...' : 'Sync & stop'}</button>
           </div>
       </header>

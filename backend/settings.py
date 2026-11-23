@@ -61,6 +61,10 @@ def diki_cache_directory() -> Path:
     return data_root() / "diki_cache"
 
 
+def diki_coverage_inventory() -> Path:
+    return diki_cache_directory() / "coverage" / "inventory.json"
+
+
 def logs_directory() -> Path:
     return data_root() / "logs"
 

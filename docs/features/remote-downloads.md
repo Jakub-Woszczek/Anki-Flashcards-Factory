@@ -1,6 +1,7 @@
 # Remote Diki downloader
 
-Last updated: 2026-11-22. Implementation restored and ported; deployment pending.
+Last updated: 2026-11-23. Manual downloads verified live; automatic scheduling
+implemented locally and requires an updated worker deployment.
 
 The owner requested restoring the Northflank downloader from stash
 `8d5a6b5570d15ae80eb73ea66650c7ab51c0b13e` (index parent `12bc1d6`) while
@@ -13,8 +14,8 @@ component; the browser, backend, queues, and Anki remain on the Mac.
    It neither consumes nor rewrites the source queues.
 2. A single resident worker fetches directly from Diki into a durable `/data`
    volume, including SQLite jobs, budgets, retries, and transfer records.
-3. Completed work stays remote until an explicit Mac `pull`. Nothing pushes to
-   the Mac and no submit/pull schedule is installed automatically.
+3. Completed work stays remote until the Mac requests it. Manual `pull` remains
+   available; the application's automatic startup flow is described below.
 4. Pull stages and validates the complete manifest and payloads, imports into the
    shared local cache, then re-reads the imported data before sending an ACK.
 5. The server commits delivery before deleting payloads. Stable manifests, local
@@ -51,9 +52,127 @@ global budgets/cooldowns and guard old ACKs against new job generations.
   redirects are refused, source URLs are allow-listed, and artifacts use SHA-256.
   No credential or certificate is embedded in the image.
 
-This restores the remote queue/transfer infrastructure. It does not add the
-bounded main/book buffers or existing-Anki-note inventory discussed in
-[offline preparation](offline-cache.md#preparation-priority-a-buffer-then-existing-notes).
+## Automatic scheduling — 2026-11-23
+
+[ADR 0009](../decisions/0009-remote-preparation-scheduling.md) owns the accepted
+behavior. With `DIKI_REMOTE_URL` and `DIKI_REMOTE_TOKEN` configured, FastAPI lifespan
+starts one application-scoped coordinator. Importing modules or opening another
+workspace does not start it again. Missing configuration leaves local behavior
+unchanged; partial configuration/unsupported workers are visible in the offline
+panel without blocking vocabulary processing.
+
+### Recurring buffers and existing-note coverage
+
+- Select the first **100 nonempty occurrences per source file before deduplication**.
+  Shared words download once and meaningful case remains separate. Invalid or
+  duplicate occurrences count toward the window; failures do not expand it.
+- Submit missing HTML/audio goals in background at startup and after successful
+  source removal. Save/update, discard, custom-card completion, and removal retry
+  are covered. Failed removal and review-only saves do not advance source windows.
+  Notifications coalesce; no HTTP request runs inside source/save locks.
+- Explicit `export-coverage` reads normal Anki note types once and saves
+  `diki_cache/coverage/inventory.json`. Missing-Diki and image-only types are excluded.
+  Invalid/unprocessable English fields are reported; notes are not changed. An
+  already prepared word list can be loaded with `coverage --file`.
+- Startup reads that saved file without querying Anki and submits **only missing
+  HTML**, reusing partial cache coverage and safe capitalization aliases. The
+  inventory is outside `words_to_add/` and cannot become a consuming source queue.
+- Eligible buffer jobs precede eligible coverage jobs, FIFO within each class.
+  Existing manual jobs default to buffer priority. Running requests, retry delays,
+  global cooldowns, daily budgets, storage limits, and failure ceilings remain.
+- HTML-only goals can gain audio without another HTML fetch. Frozen manifests
+  remain unchanged; follow-up generations preserve old-ACK isolation. Terminal
+  failed jobs still require explicit retry.
+- Server-origin-scoped accepted-goal receipts in the local cache index avoid
+  repeated submissions. They do not replace source files or count remote work as
+  locally cached. Existing server receipts still protect against accidental replay
+  after volume loss or cache deletion; use the documented explicit recovery flow.
+
+### One startup drain, immediate import
+
+A separate drain worker recovers interrupted journals, snapshots ready job
+generations once, then downloads, validates, **immediately imports and ACKs** each
+batch before requesting the next. It handles multiple 10-word batches; jobs that
+complete after the snapshot wait until another launch. There is no periodic remote
+polling during the session. A separate submission worker keeps replenishment
+independent of slow downloads.
+
+Automatic imports retain valid independent local snapshots, use short cache locks,
+validate audio against retained HTML, and journal reconciliation before ACK.
+Incomplete batches never reach cache; interrupted downloads/imports/lost ACKs
+recover through durable journals. Changed audio-only source HTML still blocks ACK.
+
+Shutdown signals cancellation without joining network waits, importing an exit
+backlog, or intentionally deferring ACKs. The existing Anki sync flow is independent.
+The offline panel reports local submission/drain state, counts, inventory presence,
+invalid notes, and errors without contacting Northflank when it refreshes.
+
+Scheduling needs a worker reporting `schedulingVersion: 1`. Additive migrations
+preserve jobs, manifests, receipts, and budgets. Protocol-2 artifacts and existing
+manual APIs stay supported. Publishing/redeploying code remains an owner operation.
+
+After updating the worker:
+
+```bash
+# Explicit read-only Anki export, once. No dictionary fetch or note changes.
+.ankiFac/bin/python -m tools.diki_remote export-coverage
+# Normal launches then reconcile, submit, and drain automatically.
+.ankiFac/bin/python main.py --app
+```
+
+Bare manual `submit` retains full-list behavior, rather than the automatic 100-entry
+windows. Manual `coverage` submits inventory HTML only; manual `pull` retains its
+immediate import/ACK behavior.
+
+### Scheduling verification
+
+The separate header health button is documented below; its checks do not run a
+scheduler reconciliation or a startup drain.
+
+`.ankiFac/bin/python -m tools.check` passed Ruff lint/format (61 Python files),
+Pyright with zero errors/warnings, 276 tests (270 passed, 6 skipped), and frontend
+TypeScript/build. Twenty-five new regressions exercise exact occurrence windows,
+inventory scope/partial reuse, queued/running/frozen/delivered promotions, old-ACK
+isolation, multi-batch finite drains, cancellation/lost-ACK recovery, retained cache
+snapshots, real app lifespan/source hooks, immediate import, nonblocking shutdown,
+and unreadable-book isolation. Old manual transfer/migration tests also pass.
+
+The local `diki-remote:scheduling` Linux/amd64 image built and passed a default-
+entrypoint smoke test under a 256 MiB limit. Authenticated status exposed
+`schedulingVersion: 1`; an empty finite snapshot/drain worked with zero upstream
+requests and external networking disabled. All implementation tests used temporary
+data and fake integrations; no personal inventory was exported and the live worker
+was not changed.
+
+## Node connection indicator
+
+The homepage header has a clickable Node status pill beside Anki and Gemini.
+It checks once when that header mounts and again on click; there is no interval
+polling. Checking is independent of the existing home/Anki status request, so a
+slow or unavailable node does not hold up the rest of the page.
+
+The browser calls `/backend/remote-node/health`. The local backend uses the
+configured URL/token for an authenticated, read-only `GET /v1/status`, with short
+2-second connect/3-second read timeouts, certificate verification, redirects
+disabled, and the existing bounded JSON reader. Credentials and remote response
+contents are not forwarded to the browser.
+
+Green means the authenticated node API responds with a supported status shape;
+red means it is unavailable or the check failed. Checking/not-configured states
+use a neutral indicator. If the local backend cannot answer, the label is Unknown
+rather than claiming the remote node is down. Hover/focus details provide the
+result and last-check time. A reachable older worker can be online while still
+requiring an update for automatic scheduling; the details explain this.
+
+API health is separate from Diki reachability, cooldown, and queue progress. The
+check submits no jobs, fetches no dictionary content, and triggers no transfer.
+
+Verification: the full project check passed with 63 formatted Python files, zero
+Pyright errors/warnings, 283 tests (277 passed, 6 skipped), and frontend production
+build. Seven new offline regressions cover bounded/authenticated read-only status,
+missing configuration, authentication failure without secret exposure, timeouts,
+malformed status, older-worker/cooldown distinction, and the separate local route.
+All HTTP was fake; no live node, Diki, or Anki request was used for these checks.
 
 ## Deployment and verification
 
@@ -76,5 +195,34 @@ The four explicit loopback streaming tests passed separately; `git diff --check`
 also passed. No live Diki/Anki request or personal-data mutation was performed.
 The original stash remains available. No commit, push, or cloud resource creation
 was performed. The owner clarified that deployment is a later goal, outside the
-restoration/compatibility-update request. Container build/runtime and cloud
-deployment remain unverified.
+restoration/compatibility-update request.
+
+### Subsequent local container verification
+
+On 2026-11-22, the owner requested an image while configuring the Northflank
+service. GitHub `main` and the clean local checkout both contained `089a609`.
+Built `diki-remote:089a609` with:
+
+```bash
+docker build --platform linux/amd64 -f deploy/northflank/Dockerfile -t diki-remote:089a609 .
+```
+
+The default entrypoint then passed a local smoke test under a 256 MiB memory limit:
+health returned protocol 2, unauthenticated status returned 401, authenticated
+status reported an empty queue and zero upstream requests, and shutdown succeeded.
+The disposable test container used external networking disabled and a temporary
+`/data` mount; no personal data or production secret was used. This verifies local
+image build/startup, not persistent-volume recovery, remote fetch performance, or
+Northflank deployment. No image was pushed to a registry. Northflank's Combined
+service can build directly from the committed Dockerfile using context `/` and
+location `/deploy/northflank/Dockerfile`.
+
+### Manual live verification — 2026-11-23
+
+The owner deployed `089a609` with persistent `/data`. `replenish` reused saved HTML
+and imported an 11,446-byte recording. An explicitly requested separate-agent test
+then submitted `Standoff` and `Eggnog` sequentially, waited 60 seconds each, pulled,
+and verified newly downloaded HTML/MP3 sizes, digests, meanings, and recording
+provenance. Four upstream requests produced both pairs; ACKs reported zero cleanup
+pending and the node retained no payloads. Source queues stayed unchanged. This
+verifies the original manual path, not live operation of the new scheduler.

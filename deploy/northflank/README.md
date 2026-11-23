@@ -1,12 +1,18 @@
 # Remote Diki downloader on Northflank
 
-One always-on service owns a durable download queue and a transfer outbox. The
-Mac submits missing words and, **only when `pull` is run**, downloads completed
-HTML/MP3 files into its existing Diki cache. Anki and the application's database
-stay on the Mac.
+One always-on service owns durable priority queues and a transfer outbox. The
+Mac submits missing work, then downloads completed HTML/MP3 through one automatic
+startup drain or manual `pull`. Each batch is immediately imported and ACKed in
+background. Anki and the application's database stay on the Mac.
 
-**Deployment preparation only:** no Northflank deployment, account entitlement,
-container build/runtime, or live Northflank-to-Diki connection has been verified.
+**Rollout:** the original `089a609` worker was deployed and its manual HTML/MP3
+path verified live on 2026-11-23. The new automatic scheduler requires this updated
+worker and a Mac client with matching scheduling support; its live rollout is
+separate from implementation checks. Account free-allowance coverage remains
+unverified. The original Linux/amd64 image built
+successfully on 2026-11-22, and its default entrypoint passed a local health/auth
+smoke test within a 256 MiB limit, with external networking disabled and a temporary
+test mount. This does not verify persistent-volume recovery or remote fetching.
 The restored implementation uses the current shared dictionary parser and data
 paths. Local tests use fixtures, temporary data, and explicit loopback HTTP.
 See [the feature record](../../docs/features/remote-downloads.md) for current
@@ -52,6 +58,8 @@ Use a combined build/deploy service or a deployment service with this image:
 
 1. **Build context:** repository root (`.`).
    **Dockerfile:** `deploy/northflank/Dockerfile`.
+   In the Northflank creation form, enter build context `/` and Dockerfile
+   location `/deploy/northflank/Dockerfile`, then reload the Dockerfile preview.
    Its Dockerfile-specific ignore file limits the uploaded context; the image
    copies only dictionary modules, deployment Python files, and dependencies.
    Personal `.env`, word lists, cache, Anki data, and application databases are
@@ -128,7 +136,42 @@ python -m tools.diki_remote pull --max-batches 1
 
 # Global options go BEFORE the subcommand; use the same cache for submit/pull.
 python -m tools.diki_remote --cache-dir diki_cache pull
+
+# Explicit one-time read-only export from normal Anki vocabulary note types.
+python -m tools.diki_remote export-coverage
+
+# Optional manual HTML-only inventory submission, or import a prepared word file.
+python -m tools.diki_remote coverage
+python -m tools.diki_remote coverage --file existing-words.txt
 ```
+
+### Automatic application scheduling
+
+With both remote settings configured, a normal app launch prepares the first
+**100 nonempty entries per vocabulary file**, counting duplicates before
+deduplication. Missing buffer HTML/audio has priority over the saved existing-note
+HTML inventory. Replenishment runs off-thread after successful save/discard/source
+removal and reconciles at startup for file edits or interrupted submissions.
+
+The existing-note inventory is `ANKI_FACTORY_DATA_DIR/diki_cache/coverage/inventory.json`.
+`export-coverage` explicitly reads the two normal note types, excluding the missing-
+Diki and image-only types, preserving casing and reporting invalid English fields.
+Ordinary app startup reads that file, not Anki. Existing partial HTML coverage is
+reused. `coverage --file` loads an owner's UTF-8 word-per-line file outside consuming
+queues. Failed coverage work can be explicitly retried with `coverage --retry-failed`;
+`coverage --redownload-delivered` restores delivered HTML missing locally.
+
+Once per backend launch, a background worker recovers journals, snapshots current
+ready remote jobs, then downloads/imports/verifies/ACKs each batch immediately.
+It does not wait or poll for work finishing after the snapshot. Newly imported
+vocabulary is available during the session. Exit signals cancellation without
+joining network waits; recovery handles interruption between any of those steps.
+
+Worker status must advertise `schedulingVersion: 1`; update/redeploy the worker
+while preserving `/data` before enabling the new Mac scheduler. An old worker
+remains usable manually and causes a clear automatic-preparation error, not
+fallback to unbounded submission or another import policy. Manual `submit` still
+scans complete source files; the 100-entry limit applies to automatic scheduling.
 
 The default local cache is `ANKI_FACTORY_DATA_DIR/diki_cache/`. Explicit relative
 `--words-dir` and `--cache-dir` paths resolve against that data root, like the local
@@ -166,7 +209,12 @@ pages with no advertised recordings). `alreadyCached` also includes these new
 local negatives. Legacy HTML-seeded jobs remain supported for queue recovery,
 but the current Mac command never sends a seed.
 
-Repeated submission skips queued, running, ready, failed, and delivered words.
+Repeated submission skips already satisfied/accepted resource goals. Higher-priority
+buffer requests can promote HTML-only coverage and add missing audio. Issued
+manifests remain immutable; follow-up generations preserve reusable HTML and old-
+ACK isolation. Failed jobs still require explicit retry; delivered resources that
+are missing locally still require explicit redownload unless the request adds a
+genuinely missing audio goal.
 Delivered tombstones remain even after server payload deletion. The server
 continues work while the Mac is asleep; it never pushes files to the Mac.
 
@@ -174,9 +222,8 @@ continues work while the Mac is asleep; it never pushes files to the Mac.
 application/interactive CLI still follows its own cache-first online behavior;
 use `DIKI_OFFLINE=1` locally if missing entries must never trigger local Diki
 requests. When switching background work to this server, unload any existing
-local prefetch launchd agent using the root README's commands. `submit` is not a
-replacement for that existing schedule until you explicitly choose to run it;
-no new schedule or automatic pull is installed.
+local prefetch launchd agent using the root README's commands. Automatic preparation
+is application-scoped; no additional launchd job or periodic remote pull is installed.
 
 ## Transfer and durability contract
 
@@ -203,13 +250,17 @@ protocol-2 transfers rather than importing them incorrectly.
    The complete batch is validated before any cache import.
 3. Import uses atomic replacement, file and directory fsync, then SQLite
    transactions (`synchronous=EXTRA`, and `fullfsync=ON` on supported systems).
-   Every imported artifact is re-read and validated before ACK.
+   Every imported artifact is re-read and validated before ACK. Automatic imports
+   preserve a valid independent local snapshot that appeared since submission,
+   validate recording provenance against the retained HTML, and journal that
+   reconciliation while retaining original staged bytes until ACK. Audio-only
+   source-context mismatches remain unresolved errors.
 4. The client sends authenticated ACK with the exact manifest digest. Only after
    the server commits the receipt and delivery states does it unlink payloads
    and sync their directories. Deletion failures leave `cleanupPending` and are
    retried on later cycles/ACKs. Receipts/tombstones remain in SQLite.
 5. The local journal is removed after the ACK response. If the response is lost,
-   the next explicit `pull` reuses committed cache/staged content and repeats the
+   the next startup drain or explicit `pull` reuses committed cache/staged content and repeats the
    idempotent ACK. It does not need server files that have already been deleted.
 
 Downloads alone never delete server payloads. Interrupted pulls retain fully

@@ -5,6 +5,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from backend.remote_health import check_remote_node
+from backend.remote_preparation import RemotePreparation
 from backend.schemas import (
     CommitRequest,
     CurrentPatchRequest,
@@ -32,9 +34,16 @@ service = FactoryService()
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
+    preparation = RemotePreparation.from_environment(service.diki.resources.root)
+    service.remote_preparation = preparation
+    if preparation is not None:
+        preparation.start()
     try:
         yield
     finally:
+        if preparation is not None:
+            preparation.close()
+        service.remote_preparation = None
         try:
             if not getattr(application.state, "shutdown_sync_flushed", False):
                 service.flush_sync()
@@ -62,9 +71,19 @@ def status():
     return service.status()
 
 
+@app.get("/backend/remote-node/health")
+def remote_node_health():
+    return check_remote_node()
+
+
 @app.get("/backend/offline-coverage")
 def offline_coverage():
-    return coverage(service.diki.resources)
+    result = coverage(service.diki.resources)
+    preparation = getattr(service, "remote_preparation", None)
+    result["remotePreparation"] = (
+        preparation.status() if preparation is not None else {"enabled": False}
+    )
+    return result
 
 
 @app.post("/backend/shutdown")

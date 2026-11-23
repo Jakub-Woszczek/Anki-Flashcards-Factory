@@ -15,7 +15,9 @@ class WordList:
     error: str | None = None
 
 
-def discover_lists(directory=None) -> list[WordList]:
+def discover_lists(directory=None, *, entry_limit: int | None = None) -> list[WordList]:
+    if entry_limit is not None and entry_limit < 1:
+        raise ValueError("Entry limit must be positive")
     root = (data_path(directory) if directory is not None else words_directory()).resolve()
     paths = sorted(
         root.rglob("*.txt"),
@@ -36,6 +38,9 @@ def discover_lists(directory=None) -> list[WordList]:
                 for line in path.read_text(encoding="utf-8-sig").splitlines()
                 if line.strip()
             ]
+            # Occurrences, including duplicates/invalid entries, consume positions.
+            if entry_limit is not None:
+                lines = lines[:entry_limit]
             words, invalid = {}, 0
             for line in lines:
                 try:

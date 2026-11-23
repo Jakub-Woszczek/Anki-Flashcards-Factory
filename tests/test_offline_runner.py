@@ -17,6 +17,8 @@ class TestOfflineRunner(unittest.TestCase):
         def probe():
             self.assertEqual(os.environ["RUN_LIVE_DIKI_TESTS"], "0")
             self.assertEqual(os.environ["RUN_LOOPBACK_TESTS"], "0")
+            self.assertEqual(os.environ["DIKI_REMOTE_URL"], "")
+            self.assertEqual(os.environ["DIKI_REMOTE_TOKEN"], "")
             self.assertEqual(os.environ["DIKI_OFFLINE"], "0")
             sandbox = Path(os.environ["ANKI_FACTORY_DATA_DIR"])
             self.assertTrue(sandbox.is_dir())

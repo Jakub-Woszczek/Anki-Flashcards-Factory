@@ -1,10 +1,11 @@
 # Diki cache and background preparation
 
-Last updated: 2026-11-22.
+Last updated: 2026-11-23.
 
-Specification status: two purposes, bounded queue-buffer priority, and rolling
-snapshot retention confirmed. Exact buffer configuration/book selection and the
-existing-note population mechanism remain to be designed.
+Specification status: first 100 pending entries per file, buffer-first priority,
+one-time existing-note HTML inventory, and rolling-snapshot retention confirmed.
+Automatic remote scheduling is implemented; worker rollout and actual full
+inventory population are separate operational steps.
 
 Implementation status: shared raw-HTML/audio caching, list-driven prefetch, strict
 offline mode, and coverage reporting exist. The current prefetch entry point
@@ -17,11 +18,11 @@ share centralized paths; independent cache/list environment variables were retir
 See [data storage and migration](data-storage.md). Resource selection, snapshot
 retention, and interactive/background request isolation remain unchanged.
 
-An optional [remote downloader](remote-downloads.md) was restored from the earlier
-Northflank experiment on 2026-11-22. It accepts explicit submissions and imports
-completed resources only on manual pull, with durable ACK-before-delete transfers.
-It shares the Mac cache but has its own remote queue and budgets. Deployment is
-pending; this does not implement the buffer/existing-note planner below.
+The optional [remote downloader](remote-downloads.md) shares the Mac cache and owns
+a separate durable remote queue/budgets. Its original manual path was verified live.
+Automatic scheduling now submits bounded source windows, fills missing inventory
+HTML, and performs one startup drain with immediate background import/ACK. See
+[ADR 0009](../decisions/0009-remote-preparation-scheduling.md).
 
 ## Purpose 1: process pending words offline
 
@@ -50,9 +51,8 @@ Polish alternatives with stored content.
 
 Repeated checks, tests, and future refinement work should reuse downloaded HTML
 instead of downloading it on every run. Retaining raw source allows changed parser
-or contract logic to run against the same local material. HTML is central to this
-second goal; the scope/priority of preparing audio for existing notes is not yet
-specified.
+or contract logic to run against the same local material. The one-time existing-note
+backlog requests HTML only; recordings are requested for pending-word buffers.
 
 This dataset supports future checks; it does not mean that compatibility audits,
 bulk migration, or complete existing-note coverage already exist. The current
@@ -99,15 +99,17 @@ word before serving the existing-note dataset goal.
 
 Intended order:
 
-1. Prepare the front of the main pending queue first: **roughly 100 words** was
-   offered as a safe initial buffer.
-2. Prepare a similar front-of-queue buffer for book vocabulary.
-3. Once those buffers are covered, work on HTML for older/existing Anki notes.
+1. Prepare the first **100 nonempty pending entries of each vocabulary file**,
+   including all discovered book sources, selecting before deduplication.
+2. Give those HTML/audio goals priority over existing-note HTML-only work.
+3. Use remaining eligible work for missing HTML in the one-time inventory.
 
-The number 100 is an illustrative starting target, not a strict daily limit,
-immutable constant, or throughput promise. The exact set of book lists and buffer
-configuration were not settled. Intake examples explain the rationale; they are
-not limits imposed on the owner.
+The owner fixed the window at 100 per file on 2026-11-23, refining the earlier
+illustrative target. Duplicates share resources but occupy source positions;
+failures do not cause downloading beyond the window. Main/source order is retained
+within submissions. Already-running remote requests finish normally; eligibility
+still respects retries and global cooldowns. The window is not a daily limit or
+throughput promise.
 
 ## Source policy: keep the accumulated snapshot
 
@@ -148,27 +150,19 @@ or missing downloads as successes or disabling their existing retry behavior.
 
 See [ADR 0003: Retain a rolling Diki snapshot](../decisions/0003-rolling-diki-snapshot.md).
 
-## Coverage gap: existing Anki vocabulary
+## Existing-note inventory and current rollout boundary
 
-The cache can already reuse resources for any word fetched through its provider.
-An existing-note word can be present because it was also in a list or looked up
-interactively. However, the current prefetch discovers lists, not the existing
-Anki collection, so it does not by itself establish the owner's desired gradual
-coverage of existing vocabulary.
+Explicit `tools.diki_remote export-coverage` reads the normal English vocabulary
+types once, excluding Diki-missing/image-only types, and retains a word inventory
+under the data root. Startup uses that file and existing cache coverage; it never
+scans Anki. Invalid exported English values are reported, not silently rewritten.
+The remote scheduler's two priorities implement the intended buffer/backlog split.
 
-The current list-driven ordering also does not implement the intended transition
-from bounded queue buffers to existing-note preparation. Record the accepted
-priority without silently choosing a collection scan, exported list, profile/model
-scope, or scheduling mechanism as its implementation.
-
-## Remaining design details
-
-1. Select the mechanism/scope for obtaining existing-note vocabulary.
-2. Define exact buffer configuration and which book queues receive preparation.
-3. Clarify resource-readiness details with audio behavior where needed.
-
-These can be refined during implementation planning. The owner has answered the
-priority and freshness questions; do not keep reopening them as prerequisites.
+Implementation is not evidence that the owner's entire collection is covered:
+the updated worker must be deployed, the explicit inventory created, and missing
+HTML downloaded/imported over time. The standalone local prefetch remains list-
+driven. See [remote preparation](remote-downloads.md) for lifecycle, commands, and
+the distinction between verified manual deployment and new scheduling rollout.
 
 ## Authority and verification
 

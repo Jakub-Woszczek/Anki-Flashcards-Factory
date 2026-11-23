@@ -312,7 +312,8 @@ list uzyj `--words-dir`. Normalny harmonogram powinien dzialac bez `--refresh`.
 ### Zdalny downloader Northflank
 
 Opcjonalny serwer przechowuje trwala kolejke oraz gotowe HTML/MP3. Mac wysyla
-brakujace zadania i pobiera wyniki **tylko po jawnym `pull`**. Import waliduje
+brakujace zadania i pobiera wyniki w tle przy uruchomieniu aplikacji lub przez
+jawne `pull`. Import waliduje
 manifest, checksumy i zapis lokalny; dopiero potem ACK pozwala serwerowi usunac
 pliki. Istniejacy HTML pozostaje na Macu; zadanie audio zawiera tylko reklamowane
 URL-e, checksum HTML i wersje selektora.
@@ -321,12 +322,21 @@ URL-e, checksum HTML i wersje selektora.
 .ankiFac/bin/python -m tools.diki_remote submit
 .ankiFac/bin/python -m tools.diki_remote status
 .ankiFac/bin/python -m tools.diki_remote pull
+# Jednorazowy eksport angielskich slow z normalnych typow notatek Anki.
+.ankiFac/bin/python -m tools.diki_remote export-coverage
 ```
 
 Konfiguracja `DIKI_REMOTE_URL` / `DIKI_REMOTE_TOKEN`, wdrozenie z trwalym wolumenem
 i odzyskiwanie: [deploy/northflank/README.md](deploy/northflank/README.md).
-Lokalne sciezki nadal wynikaja z `ANKI_FACTORY_DATA_DIR`. Polecenia nie pobieraja
-z Diki lokalnie i nie instaluja automatycznego submit/pull. Wybierajac zdalne
+Lokalne sciezki nadal wynikaja z `ANKI_FACTORY_DATA_DIR`. Przy obu ustawieniach
+remote aplikacja automatycznie przygotowuje pierwsze 100 wpisow kazdego pliku,
+uzupelnia brakujacy HTML z zapisanego eksportu Anki z nizszym priorytetem i wykonuje
+jeden drain gotowych wynikow przy starcie. Kazda partia jest od razu importowana
+do cache i potwierdzana ACK w tle. Przejscie do kolejnego slowa uruchamia asynchroniczne
+uzupelnienie okna. Wyjscie nie czeka na pobieranie; dzienniki wspieraja wznowienie.
+Zwykle `submit` bez argumentow nadal obejmuje cale listy, nie tylko okna 100 wpisow.
+Nowy scheduler wymaga zaktualizowanego serwera (`schedulingVersion: 1`).
+Polecenia nie pobieraja z Diki lokalnie. Wybierajac zdalne
 pobieranie, wylacz lokalny harmonogram ponizej. Aplikacja interaktywna nadal ma
 wlasny tryb cache-first; `DIKI_OFFLINE=1` blokuje jej lokalne pobieranie.
 

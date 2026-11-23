@@ -90,13 +90,15 @@ The Diki cache has two primary goals:
    without downloading the same pages on every run.
 
 Existing-note source data is part of the intended scope, not merely an incidental
-performance benefit. Current background preparation is list-driven, so complete
-existing-collection coverage is not established. See
+performance benefit. An explicit one-time inventory and remote preparation now
+support filling only missing HTML; complete existing-collection coverage is not
+established merely by implementing that mechanism. See
 [cache and background preparation](features/offline-cache.md).
 
-The intended preparation priority is a bounded offline buffer at the front of the
-main queue first (roughly 100 words as a starting target), a similar book buffer,
-then HTML for existing notes. Successfully downloaded content is retained as a
+The owner confirmed first-100-entry windows for every pending vocabulary file on
+2026-11-23, refining the original rough main/book buffer target. Those HTML/audio
+jobs precede existing-note HTML coverage; one startup drain immediately imports
+and ACKs results in background. Successfully downloaded content is retained as a
 rolling snapshot collected over weeks. Routine refreshing is unnecessary; source
 changes exposed by checks will be evaluated manually by the owner. See
 [ADR 0003](decisions/0003-rolling-diki-snapshot.md).

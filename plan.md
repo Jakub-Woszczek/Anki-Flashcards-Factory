@@ -1,4 +1,266 @@
-# Approved implementation plan: offline Diki
+# Diki implementation plans
+
+## Approved: automatic remote preparation — 2026-11-23
+
+**Status: implemented and verified locally, with immediate background import and ACK.**
+The owner rejected exit-time import and deliberately deferred ACKs. Download each
+batch into the existing journal, validate, merge immediately under short cache
+locks, verify, and ACK immediately. Shutdown only signals cancellation; ordinary
+interruption recovery handles incomplete downloads/imports/ACKs at next launch.
+This amendment supersedes deferred-import details in the original research.
+
+### Approach and agreed behavior
+
+See [the scheduling research](research.md#remote-scheduling-research--2026-11-23).
+Retain the tested remote fetcher, its pacing/budgets, raw resources, manual CLI,
+and acknowledgement-before-deletion safeguards. Add these layers:
+
+```text
+one-time normal-note export --> existing-note inventory --> missing HTML ------+
+                                                                            |
+first 100 entries per source --> missing HTML/audio --> buffer-priority jobs --+--> node
+            ^                                                               |
+            | successful source advancement                                  v
+            +--- background reconcile                       immutable ready batches
+                                                                            |
+startup: background journal recovery -> one ready-work snapshot ---------------+
+                                      -> download -> immediate import -> ACK
+shutdown: stop scheduling; do not wait for network work
+```
+
+**Activation:** run automatically with the app when both existing remote URL/token
+settings are configured. Without remote configuration the app keeps its current
+local behavior. Partially configured/unsupported remote setup becomes a visible
+background-preparation status error, not a failed save or blocked app startup.
+`DIKI_OFFLINE` continues to prohibit local Diki fetching; it does not prohibit
+transfers from the configured remote worker.
+
+### 1. Exact entry windows and resource planning
+
+**Files:** `external_apis/diki_lists.py`, `external_apis/diki_remote.py`,
+`backend/settings.py`.
+
+- Select the first 100 **nonempty source occurrences before deduplication**,
+  matching `SessionStore._entries`. Preserve source order, BOM handling, meaningful
+  case, invalid-entry diagnostics, and existing path confinement. Keep default
+  full-list discovery/reporting compatible for manual tools.
+- Deduplicate work across windows, keeping the main-file-first traversal already
+  provided by source discovery. Do not expand past entry 100 to compensate for
+  duplicates, missing entries, or download failures.
+- Compute missing resource goals from integrity-checked local resources, completed
+  staged work, and accepted remote submissions. Buffer goals include recordings
+  when available; coverage goals include HTML only. HTML is never uploaded.
+- Reuse the current resource planner, cache locks, and no-audio discovery. Short
+  local metadata/cache writes during the session are acceptable; HTTP never holds
+  the cache lock.
+- Do not persist a second authoritative vocabulary queue locally. Keep only
+  server-origin-scoped submission/transfer receipts, reconciliation status, and
+  interrupted-notification state. Re-read source files on startup and advancement.
+- Previously submitted jobs are retained; source edits do not silently delete
+  remote work or successful cached source.
+
+Illustrative interface:
+
+```python
+windows = discover_lists(entry_limit=100)
+goals = plan_preparation(windows, coverage_words, cache_view, staged_view)
+# Each goal carries a word, resource requirement, and buffer/coverage priority.
+```
+
+### 2. One-time existing-note inventory
+
+**Files:** new `external_apis/diki_inventory.py`, `tools/diki_remote.py`,
+`backend/settings.py`; reuse `backend/note_contracts.py` without changing its rules.
+
+- Add an explicit `export-coverage` CLI operation, using bounded read-only
+  AnkiConnect queries and the documented two normal note types. Their type scope
+  excludes the `Diki_missing` note type and image-only `TEMP Image recall`; do not
+  introduce another deck picker or rely on historical deck labels.
+- Export English `en_word` values with original casing, deduplicating downloads
+  without changing notes. Verify actual returned note type/IDs and field syntax;
+  report invalid/missing fields explicitly so incomplete coverage is visible.
+- Save the word file and bounded export provenance/report atomically beneath
+  `ANKI_FACTORY_DATA_DIR/diki_cache/coverage/`, outside consuming source files.
+  A supplied word file can also be loaded explicitly through the CLI.
+- On normal application startup, read this inventory without querying Anki.
+  Enqueue only missing HTML at coverage priority. The inventory is a one-time
+  input, not a recurring collection audit, migration, or audio backlog.
+- Preserve existing cache hits and staged/remote coverage. Normal new notes already
+  pass through the recurring buffers; the export is not regenerated after saves.
+
+### 3. Persistent server priorities and compatible goal upgrades
+
+**Files:** `deploy/northflank/config.py`, `app.py`, `service.py`.
+
+- Add schema fields with safe defaults/migrations for buffer versus coverage
+  priority and resource demand. Existing/manual jobs retain their current default
+  resource behavior and become ordinary buffer-priority jobs.
+- Select eligible queued buffer jobs before eligible coverage jobs, FIFO within
+  the priority class. Already-running HTTP work is not interrupted. Per-resource
+  retry delays and global cooldowns still apply; eligible coverage may run while
+  a failed buffer word waits for retry.
+- Coalesce the same word across both classes, promote queued coverage work when
+  it enters a buffer, and upgrade a missing audio goal without fetching HTML again
+  when source HTML is already available locally/staged.
+- Handle promotions during an in-flight HTML fetch using current persisted demand,
+  not only the stale job snapshot read before HTTP.
+- Keep issued manifests immutable. If an HTML-only ready/batched/delivered
+  generation later needs audio, record an additional goal/follow-up generation
+  rather than rewriting that manifest or treating the word as permanently done.
+  Existing completed resource receipts prevent repeated HTML downloads. Preserve
+  old-ACK isolation and clean old payloads before a newer generation can reuse a
+  word's cache paths.
+- Do not turn scheduling into automatic retries of terminal failed jobs or
+  automatic re-download after lost cache. Preserve explicit recovery flags and
+  the daily budgets, request reservation, five-failure ceiling, storage cap,
+  single-worker locking, and source retention rules.
+- Advertise scheduling/finite-drain capabilities separately from unchanged
+  version-1/2 artifact manifests. Old clients/manual calls stay supported; new
+  scheduling checks capabilities before relying on new endpoints.
+
+Selection shape:
+
+```sql
+SELECT * FROM remote_jobs
+WHERE state = 'queued' AND retry_at <= ?
+ORDER BY priority, created_at, rowid LIMIT 1;
+```
+
+### 4. Finite startup drain with immediate import and acknowledgement
+
+**Files:** `deploy/northflank/app.py`, `service.py`,
+`external_apis/diki_remote.py`, `external_apis/diki_transfer.py` if needed.
+
+- Add an authenticated ready-work snapshot operation. Persist the finite set of
+  ready job generations (including existing unACKed manifests) at snapshot time.
+  Fetching that snapshot must not initiate Diki requests.
+- Filter normal manifest enumeration by the snapshot, importing and ACKing each
+  batch before requesting the next. There is no need to expose multiple unACKed
+  batches. Keep existing size, URL, artifact, and authentication limits.
+- Jobs completing after the snapshot wait until a later app launch. A network
+  interruption leaves durable snapshot/cursor and artifact journals for recovery;
+  do not create a polling loop that waits for more ready words.
+- Reuse the tested client transfer implementation with cancellation and a finite
+  drain selector:
+
+```python
+drain_startup_snapshot(...)   # download -> validate -> import -> verify -> ACK
+```
+
+- Keep manual `pull` as the same composition of stage/import/ACK, preserving its tested
+  immediate-import behavior and existing interrupted-pull journal compatibility.
+- Publish a completed-batch marker only after all artifacts and audio-only source
+  context are validated and durable. Incomplete batches are never imported.
+- Retain staged artifacts and receipts until the server confirms ACK. A lost ACK
+  response must remain recoverable without re-fetching deleted server payloads.
+- Revalidate before ACK. If a valid independent local snapshot appeared during the
+  session, preserve it, retain the staged bytes until reconciliation is durable,
+  and explicitly record the keep-local outcome. Never claim two differing digests
+  are identical. Incompatible audio-only context stays unresolved without ACK.
+
+### 5. Background coordinator and lifecycle hooks
+
+**Files:** new `backend/remote_preparation.py`, `backend/app.py`,
+`backend/services.py`; small additions to offline coverage/status UI if needed.
+
+- Instantiate an optional application-scoped coordinator from FastAPI lifespan;
+  do not start threads or contact a remote service at module import.
+- In background at startup, recover interrupted transfers, open one new finite
+  drain, and immediately import/ACK its results.
+  Reconcile/submit current buffer windows and coverage inventory in background,
+  with a separate/coalesced submission worker so a long download cannot stall
+  replenishment or the browser.
+- Give each worker its own HTTP client. Use cancellable/bounded requests, brief
+  local journal locks, and the existing cache lock only for actual local import.
+  Do not hold a cache or source lock over HTTP, sleeps, or network-thread joins.
+- Notify after successful `_complete_source` and discard consumption. Include
+  successful retry-removal/custom-card paths through that common hook. Unresolved
+  entries, stale requests, failed saves, and failed source removals do not advance
+  the preparation window. Review-only saves have no source-window event.
+- At shutdown, stop new work without joining network waits. Leave interrupted
+  journals and unsent submissions for startup recovery. Preserve the existing
+  Anki synchronization behavior separately.
+- Expose local-only preparation state/progress and actionable errors through the
+  existing offline panel/status path. Dashboard refreshes must not poll Northflank
+  or Anki. Clear remote credentials in the guarded test runner so a developer's
+  configured `.env` cannot activate real background work in tests.
+
+### Detailed implementation checklist
+
+- [x] Add exact 100-occurrence window discovery and shared resource-goal planning.
+- [x] Add centralized inventory path and durable origin-scoped goal receipts;
+      reuse existing cache-root staging and locks.
+- [x] Add one-time export/file-import CLI and HTML-only coverage planning.
+- [x] Migrate server priorities, demand records, and resource-aware promotions.
+- [x] Protect immutable ready transfers and old ACKs across audio follow-ups.
+- [x] Add finite ready snapshot filtering to existing bounded transfer enumeration.
+- [x] Reuse immediate transfer/import/ACK with cancellation and cache reconciliation.
+- [x] Preserve manual submit/status/pull and legacy journal/manifest recovery.
+- [x] Add application coordinator, independent submission and drain work, and
+      local-only status/error reporting.
+- [x] Wire exact successful source-advance notifications and app lifetime hooks.
+- [x] Add failure/restart/concurrency/migration regressions described below.
+- [x] Update relevant feature pages, contracts/ADR, README, storage layout, and
+      deployment guide; mark implemented versus operationally enabled separately.
+- [x] Run the full project check and review the diff against the agreed behavior.
+
+Verification: full checks passed with 61 Python files, zero Pyright errors/warnings,
+276 tests (270 passed, 6 skipped), and frontend build. The Linux/amd64 worker image
+also built and passed a network-isolated, empty-queue scheduling API startup smoke
+test under 256 MiB. No real Anki/Diki request, inventory export, remote workload
+change, commit, or push was used for implementation verification. See the current
+feature/ADR for the implemented contracts; the research preserves earlier proposals.
+
+### Verification strategy
+
+All routine verification uses temporary data, fake Anki, fake clocks/upstream
+transports, and the existing in-process client/server HTTP adapter. No live
+collection export, app launch against personal credentials, Diki request, cloud
+update, commit, or push is part of implementation verification.
+
+Required behavioral cases:
+
+1. First-100 selection before deduplication; duplicates/case variants/invalid lines,
+   books, shared words, short files, BOMs, and no out-of-root traversal or queue edits.
+2. Partial existing-note coverage; HTML-only requests; exclusion of missing/image-
+   only types; malformed note reporting; no Anki scan during app startup.
+3. Priority over an existing coverage backlog, retry eligibility, promotion during
+   a blocked fake HTTP call, and follow-up audio for already ready/delivered HTML.
+4. Import/ACK more than 10 words through a finite drain; resume across failure;
+   exclude jobs that finish after the snapshot; bound manifests and response sizes.
+5. Imports use short cache locks; requests never hold cache/source locks;
+   slow/offline remote work does not delay saves, advancement, or shutdown.
+6. Successful save/discard/custom/retry-removal events replenish once; failed or
+   stale source operations and review-only saves do not. Startup catches edits and
+   notifications lost to a process interruption.
+7. Shutdown does not wait for network work or initiate remote calls. Startup
+   recovers imported-but-unACKed batches, partial staging, lost ACKs, corrupt files,
+   changed audio-only HTML, concurrent local snapshots, and terminated workers.
+8. Old schema/data/receipts survive migration; manual CLI tests continue to pass;
+   old server capabilities fail clearly without fallback that changes semantics.
+
+Run focused tests/Pyright while implementing; finish with
+`.ankiFac/bin/python -m tools.check` and `git diff --check`. Existing explicit
+loopback transport checks are needed only if that transport code changes.
+
+### Rollout and rollback
+
+- New scheduling requires an updated worker and Mac client. Capability detection
+  keeps the current deployed worker usable for manual commands until the owner
+  chooses to publish/redeploy the changes.
+- Preserve the entire remote `/data` volume and local durable staging/inventory.
+  Additive migrations retain existing jobs, receipts, manifests, and budgets.
+  Do not erase queue state or automatically retry terminal failures on upgrade.
+- Disable automatic scheduling by removing remote configuration from the app's
+  environment when troubleshooting; retained staged/ACK state remains recoverable.
+- Roll back code without deleting durable source/cache data. Do not run old
+  lifecycle code over newly staged work expecting it to process new state formats;
+  retain compatible manual tooling until those journals are resolved.
+
+### Open decisions
+
+No further product questions. The owner approved implementation with immediate
+background import and ACK; preserve the rest of the reviewed plan.
 
 ## Approved data-repository split — 2026-11-22
 

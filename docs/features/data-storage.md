@@ -39,6 +39,8 @@ All paths below are relative to the configured data root:
 | `anki_flashcards_factory.sqlite3` | Workspace settings/drafts, index, save/removal recovery | Track |
 | `diki_cache/html/`, `diki_cache/audio/` | Retained raw HTML and MP3 snapshots | **Track both** |
 | `diki_cache/index.sqlite3` | Digests/provenance, discovery, retries, cooldowns, pacing, request history | Track |
+| `diki_cache/coverage/inventory.json` | Explicit one-time existing-note word inventory and bounded export diagnostics | Track |
+| `diki_cache/remote-imports/` | Durable incomplete-transfer payloads/manifests and reconciliation journals, removed after ACK | Track consistent unfinished state |
 | `archives/` | Exact source backups and historical migrations | Track |
 | `backups/` | Deliberate Anki/database snapshots and split manifest | Track |
 | `logs/` | Downloader logs | Ignore |
@@ -63,6 +65,10 @@ collections/media remain owned by Anki, outside this split.
   and bulk-cleanup commands share `words_to_add/`.
 - `DikiResources` gives browser/CLI/background consumers the same cache directory.
   Fetch profiles, filenames, source retention, and request behavior are unchanged.
+- Automatic remote preparation stores origin-scoped accepted-goal receipts in the
+  cache index, not a duplicate consuming queue. Its coverage inventory stays outside
+  `words_to_add/`; scheduler/pull lock files remain ignored. Stop the app's remote
+  workers as well as other data writers before a dataset checkpoint/revision change.
 - New operational backup references in SQLite are relative to the database parent
   (`archives/...`), which is the data root for the default database. Existing
   relative source/workspace and save-entry identities remain unchanged.

@@ -64,15 +64,13 @@ The owner's cache goal includes gradually collecting reusable HTML for words
 already stored in Anki, so future compatibility checks and refinements do not
 re-download the same source on each run.
 
-Current prefetch discovers pending/book text lists. Existing-note words can be
-cached indirectly, but a direct inventory-to-preparation mechanism and its scope
-have not been selected. Priority is now established in principle: roughly the
-first 100 main-queue words first, a similar book buffer, then existing-note HTML.
-The owner accepts a retained rolling snapshot without routine refresh.
-
-Status: confirmed goal/policy with an implementation gap. Exact buffer/book scope
-and population mechanics remain for design; 100 is an illustrative starting target.
-See [cache goals and coverage](features/offline-cache.md).
+Implemented locally on 2026-11-23: an explicit one-time normal-note word inventory,
+missing-HTML coverage jobs below recurring first-100-entry windows in every source,
+and automatic startup transfers with immediate background cache import/ACK.
+Existing retained HTML is reused. Full corpus population remains an operational
+goal, not a claim of completed coverage; updated worker deployment and explicit
+inventory export are needed. See [remote scheduling](features/remote-downloads.md)
+and [ADR 0009](decisions/0009-remote-preparation-scheduling.md).
 
 ## Future discussion: example sentences in Anki notes
 

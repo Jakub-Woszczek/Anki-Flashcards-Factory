@@ -127,12 +127,23 @@ class DownloadService:
                     id TEXT PRIMARY KEY, envelope TEXT NOT NULL,
                     created_at REAL NOT NULL, acknowledged INTEGER NOT NULL DEFAULT 0
                 );
+                CREATE TABLE IF NOT EXISTS remote_drains (
+                    id TEXT PRIMARY KEY, created_at REAL NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS remote_drain_jobs (
+                    drain_id TEXT NOT NULL, job_id TEXT NOT NULL,
+                    PRIMARY KEY(drain_id,job_id)
+                );
             """)
             # Existing queues and stable protocol-1 outboxes remain recoverable.
             db.execute("BEGIN IMMEDIATE")
             columns = {row[1] for row in db.execute("PRAGMA table_info(remote_jobs)")}
             if "audio_plan" not in columns:
                 db.execute("ALTER TABLE remote_jobs ADD COLUMN audio_plan TEXT")
+            if "priority" not in columns:
+                db.execute("ALTER TABLE remote_jobs ADD COLUMN priority INTEGER NOT NULL DEFAULT 0")
+            if "followup" not in columns:
+                db.execute("ALTER TABLE remote_jobs ADD COLUMN followup TEXT")
 
     def _sleep(self, seconds):
         if self.stop_event.wait(seconds):
@@ -211,6 +222,11 @@ class DownloadService:
             word = normalize_word(record["word"])
             content = None
             audio_plan = record.get("audio_plan")
+            priority = record.get("priority", "buffer")
+            if priority not in {"buffer", "coverage"}:
+                raise ValueError("Unknown preparation priority")
+            if priority == "coverage" and record.get("need_audio", True):
+                raise ValueError("Existing-note coverage requests HTML only")
             if audio_plan is not None:
                 validate_audio_plan(audio_plan)
                 if record.get("html") is not None or not record.get("need_audio", True):
@@ -220,19 +236,23 @@ class DownloadService:
                 if len(content) > 512 * 1024:
                     raise ValueError("HTML seed exceeds 512 KiB")
                 validate_html(content)
-            prepared.setdefault(
-                word,
-                (
-                    bool(record.get("need_audio", True)),
-                    content,
-                    record.get("html_status", 200),
-                    audio_plan,
-                ),
+            goal = (
+                bool(record.get("need_audio", True)),
+                content,
+                record.get("html_status", 200),
+                audio_plan,
+                0 if priority == "buffer" else 1,
             )
+            previous = prepared.get(word)
+            if previous is None:
+                prepared[word] = goal
+            else:
+                strongest = goal if goal[0] and not previous[0] else previous
+                prepared[word] = (*strongest[:4], min(previous[4], goal[4]))
         added, skipped = 0, 0
         with self.lock:
             self._cleanup_delivered()
-            for word, (need_audio, seed, status, audio_plan) in prepared.items():
+            for word, (need_audio, seed, status, audio_plan, priority) in prepared.items():
                 with self.resources.db() as db:
                     old = db.execute("SELECT * FROM remote_jobs WHERE word=?", (word,)).fetchone()
                     count = db.execute("SELECT COUNT(*) FROM remote_jobs").fetchone()[0]
@@ -241,6 +261,9 @@ class DownloadService:
                     or (old["state"] == "failed" and retry_failed)
                 )
                 if old and not reset:
+                    if self._promote(old, need_audio, audio_plan, priority):
+                        added += 1
+                        continue
                     skipped += 1
                     continue
                 if not old and count >= self.config.max_jobs:
@@ -262,8 +285,8 @@ class DownloadService:
                         db.execute("DELETE FROM remote_jobs WHERE word=?", (word,))
                         db.execute("DELETE FROM resource_failures WHERE word=?", (word,))
                     db.execute(
-                        """INSERT INTO remote_jobs(id,word,state,need_audio,created_at,updated_at,audio_plan)
-                        VALUES (?,?,'queued',?,?,?,?)""",
+                        """INSERT INTO remote_jobs(id,word,state,need_audio,created_at,updated_at,audio_plan,priority)
+                        VALUES (?,?,'queued',?,?,?,?,?)""",
                         (
                             uuid.uuid4().hex,
                             word,
@@ -271,12 +294,101 @@ class DownloadService:
                             self.clock(),
                             self.clock(),
                             canonical(audio_plan).decode() if audio_plan is not None else None,
+                            priority,
                         ),
                     )
                 added += 1
         if added:
             self.wake.set()
         return {"queued": added, "alreadyKnown": skipped}
+
+    def _promote(self, old, need_audio, audio_plan, priority):
+        """Upgrade resource goals without rewriting an issued manifest or retrying failures."""
+        with self.resources.db() as db:
+            db.execute(
+                "UPDATE remote_jobs SET priority=MIN(priority,?) WHERE id=?", (priority, old["id"])
+            )
+        if not need_audio or old["state"] == "failed":
+            return False
+        additional_audio = not old["need_audio"]
+        if old["state"] in {"ready", "delivered"} and audio_plan and old["need_audio"]:
+            artifacts = json.loads(old["artifacts"] or "[]")
+            audio_sources = {item["source"] for item in artifacts if item["kind"] == "audio"}
+            html_digests = {item["digest"] for item in artifacts if item["kind"] == "html"}
+            previous_plan = json.loads(old["audio_plan"]) if old["audio_plan"] else None
+            additional_audio = (
+                old["audio_state"] in {"not_required", "not_requested"}
+                or (bool(audio_sources) and not audio_sources.intersection(audio_plan["urls"]))
+                or (
+                    old["audio_state"] == "no_audio"
+                    and (
+                        (previous_plan is not None and previous_plan != audio_plan)
+                        or (bool(html_digests) and audio_plan["htmlDigest"] not in html_digests)
+                    )
+                )
+            )
+        if (
+            not additional_audio
+            and audio_plan is not None
+            and old["state"] in {"queued", "running"}
+        ):
+            previous_plan = json.loads(old["audio_plan"]) if old["audio_plan"] else None
+            if previous_plan != audio_plan:
+                if old["state"] == "queued":
+                    with self.resources.db() as db:
+                        db.execute(
+                            "UPDATE remote_jobs SET audio_plan=? WHERE id=?",
+                            (canonical(audio_plan).decode(), old["id"]),
+                        )
+                else:
+                    with self.resources.db() as db:
+                        db.execute(
+                            "UPDATE remote_jobs SET followup=? WHERE id=?",
+                            (
+                                canonical(
+                                    {"audio_plan": audio_plan, "priority": priority}
+                                ).decode(),
+                                old["id"],
+                            ),
+                        )
+                return True
+        if not additional_audio:
+            return False
+        plan_json = canonical(audio_plan).decode() if audio_plan is not None else None
+        if old["state"] in {"queued", "running"}:
+            with self.resources.db() as db:
+                db.execute("UPDATE remote_jobs SET need_audio=1 WHERE id=?", (old["id"],))
+                if old["state"] == "queued" and audio_plan is not None:
+                    db.execute(
+                        "UPDATE remote_jobs SET audio_plan=? WHERE id=?", (plan_json, old["id"])
+                    )
+            return True
+        if (old["state"] == "ready" and old["batch_id"] is not None) or (
+            old["state"] == "delivered" and not old["cleaned"]
+        ):
+            with self.resources.db() as db:
+                db.execute(
+                    "UPDATE remote_jobs SET followup=? WHERE id=?",
+                    (
+                        canonical({"audio_plan": audio_plan, "priority": priority}).decode(),
+                        old["id"],
+                    ),
+                )
+            return True
+        if old["state"] == "ready" or (
+            old["state"] == "delivered" and old["cleaned"] and audio_plan is not None
+        ):
+            # A fresh ID keeps snapshots and duplicate old ACKs generation-scoped.
+            with self.resources.db() as db:
+                db.execute(
+                    """UPDATE remote_jobs SET id=?,state='queued',need_audio=1,
+                    created_at=?,updated_at=?,retry_at=0,attempts=0,error=NULL,
+                    audio_state=NULL,artifacts=NULL,batch_id=NULL,cleaned=0,audio_plan=?,followup=NULL
+                    WHERE id=?""",
+                    (uuid.uuid4().hex, self.clock(), self.clock(), plan_json, old["id"]),
+                )
+            return True
+        return False
 
     def _set_job(self, identifier, state, *, retry_at: float = 0, error=None, failure=False):
         with self.lock, self.resources.db() as db:
@@ -307,6 +419,12 @@ class DownloadService:
             validate_artifact(artifact, data, job["word"])
             resources.append(artifact)
         with self.lock, self.resources.db() as db:
+            current = db.execute(
+                "SELECT need_audio FROM remote_jobs WHERE id=?", (job["id"],)
+            ).fetchone()
+            if current and current[0] and audio_state == "not_requested":
+                db.execute("UPDATE remote_jobs SET state='queued' WHERE id=?", (job["id"],))
+                return
             db.execute(
                 "UPDATE remote_jobs SET state='ready',audio_state=?,artifacts=?,error=NULL,retry_at=0,updated_at=? WHERE id=?",
                 (audio_state, json.dumps(resources), self.clock(), job["id"]),
@@ -338,7 +456,7 @@ class DownloadService:
                 with self.lock, self.resources.db() as db:
                     job = db.execute(
                         """SELECT * FROM remote_jobs WHERE state='queued' AND retry_at<=?
-                        ORDER BY created_at,rowid LIMIT 1""",
+                        ORDER BY priority,created_at,rowid LIMIT 1""",
                         (self.clock(),),
                     ).fetchone()
                     if job is None:
@@ -361,7 +479,7 @@ class DownloadService:
                         self.resources.fetch_html(job["word"])
                         if not (self.resources.metadata(job["word"], "html") or {})["exact_match"]:
                             audio_state = "not_required"
-                        elif not job["need_audio"]:
+                        elif not self._needs_audio(job["id"]):
                             audio_state = "not_requested"
                         else:
                             try:
@@ -446,19 +564,54 @@ class DownloadService:
             finally:
                 self.cycle_lock.release()
 
-    def next_transfer(self):
+    def _needs_audio(self, job_id):
+        with self.resources.db() as db:
+            return bool(
+                db.execute("SELECT need_audio FROM remote_jobs WHERE id=?", (job_id,)).fetchone()[0]
+            )
+
+    def begin_drain(self):
         with self.lock, self.resources.db() as db:
             db.execute("BEGIN IMMEDIATE")
+            # One personal consumer. A new launch supersedes abandoned snapshots,
+            # never their jobs, manifests, or receipts.
+            db.execute("DELETE FROM remote_drain_jobs")
+            db.execute("DELETE FROM remote_drains")
+            identifier = uuid.uuid4().hex
+            db.execute("INSERT INTO remote_drains VALUES (?,?)", (identifier, self.clock()))
+            db.execute(
+                "INSERT INTO remote_drain_jobs SELECT ?,id FROM remote_jobs WHERE state='ready'",
+                (identifier,),
+            )
+            count = db.execute(
+                "SELECT COUNT(*) FROM remote_drain_jobs WHERE drain_id=?", (identifier,)
+            ).fetchone()[0]
+        return {"id": identifier, "words": count}
+
+    def next_transfer(self, *, drain_id=None):
+        with self.lock, self.resources.db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            if (
+                drain_id is not None
+                and not db.execute("SELECT 1 FROM remote_drains WHERE id=?", (drain_id,)).fetchone()
+            ):
+                raise QueueConflict("Unknown startup drain; begin a new startup snapshot")
             previous = db.execute(
-                "SELECT envelope FROM remote_batches WHERE acknowledged=0 ORDER BY created_at LIMIT 1"
+                """SELECT envelope FROM remote_batches b WHERE acknowledged=0
+                AND (? IS NULL OR EXISTS (SELECT 1 FROM remote_jobs j JOIN remote_drain_jobs d
+                    ON d.job_id=j.id WHERE d.drain_id=? AND j.batch_id=b.id))
+                ORDER BY created_at LIMIT 1""",
+                (drain_id, drain_id),
             ).fetchone()
             if previous:
                 return stored_envelope(previous[0])
             items, size = [], 0
             batch_id = uuid.uuid4().hex
             for job in db.execute(
-                "SELECT * FROM remote_jobs WHERE state='ready' AND batch_id IS NULL ORDER BY created_at LIMIT ?",
-                (MAX_ITEMS,),
+                """SELECT * FROM remote_jobs WHERE state='ready' AND batch_id IS NULL
+                AND (? IS NULL OR id IN (SELECT job_id FROM remote_drain_jobs WHERE drain_id=?))
+                ORDER BY priority,created_at,rowid LIMIT ?""",
+                (drain_id, drain_id, MAX_ITEMS),
             ):
                 artifacts = json.loads(job["artifacts"])
                 item_size = sum(artifact["size"] for artifact in artifacts)
@@ -545,11 +698,33 @@ class DownloadService:
     def _cleanup_delivered(self):
         with self.resources.db() as db:
             jobs = db.execute(
-                "SELECT id,word FROM remote_jobs WHERE state='delivered' AND cleaned=0"
+                "SELECT id,word,followup FROM remote_jobs WHERE state='delivered' AND cleaned=0"
             ).fetchall()
         for job in jobs:
             try:
                 with file_lock(self.config.data_dir / "cache.lock"):
+                    if job["followup"]:
+                        followup = json.loads(job["followup"])
+                        with self.resources.db() as db:
+                            # Reuse HTML only after the old receipt was committed.
+                            db.execute(
+                                """UPDATE remote_jobs SET id=?,state='queued',need_audio=1,
+                                created_at=?,updated_at=?,retry_at=0,attempts=0,error=NULL,
+                                audio_state=NULL,artifacts=NULL,batch_id=NULL,followup=NULL,
+                                audio_plan=?,priority=? WHERE id=?""",
+                                (
+                                    uuid.uuid4().hex,
+                                    self.clock(),
+                                    self.clock(),
+                                    canonical(followup["audio_plan"]).decode()
+                                    if followup["audio_plan"] is not None
+                                    else None,
+                                    followup["priority"],
+                                    job["id"],
+                                ),
+                            )
+                        self.wake.set()
+                        continue
                     for kind in ("html", "audio"):
                         self.resources.path(job["word"], kind).unlink(missing_ok=True)
                         directory = os.open(self.config.data_dir / kind, os.O_RDONLY)
@@ -583,6 +758,7 @@ class DownloadService:
             ]
         return {
             "protocol": PROTOCOL,
+            "schedulingVersion": 1,
             "jobs": jobs,
             "state": self.resources.setting("remote_state"),
             "requestsToday": usage["requests"] if usage else 0,

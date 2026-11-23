@@ -18,6 +18,19 @@ type ListCoverage = {
 }
 
 type Coverage = {
+  remotePreparation?: {
+    enabled: boolean
+    bufferEntries?: number
+    submission?: string
+    drain?: string
+    queued?: number
+    wordsImported?: number
+    coverageAvailable?: boolean
+    coverageWords?: number
+    coverageInvalid?: number
+    submissionError?: string | null
+    drainError?: string | null
+  }
   lists: ListCoverage[]
   offlineOnly: boolean
   cooldownUntil: number
@@ -78,6 +91,14 @@ export function OfflineDownloads() {
     </div>
     {error ? <div className="inline-error">{error}</div> : null}
     {coverage ? <>
+      {coverage.remotePreparation?.enabled ? <div className="offline-run" role="status">
+        <strong>Remote preparation</strong>
+        <span>First {coverage.remotePreparation.bufferEntries} entries per file · submissions: {coverage.remotePreparation.submission} · startup drain: {coverage.remotePreparation.drain}</span>
+        <span>{coverage.remotePreparation.queued} jobs queued this session · {coverage.remotePreparation.wordsImported} words imported</span>
+        <span>{coverage.remotePreparation.coverageAvailable ? `${coverage.remotePreparation.coverageWords} words in existing-note HTML inventory · ${coverage.remotePreparation.coverageInvalid} invalid notes need review` : 'Existing-note HTML inventory has not been exported yet.'}</span>
+        {coverage.remotePreparation.submissionError ? <span className="offline-error">{coverage.remotePreparation.submissionError}</span> : null}
+        {coverage.remotePreparation.drainError ? <span className="offline-error">{coverage.remotePreparation.drainError}</span> : null}
+      </div> : null}
       <p className="muted">{coverage.offlineOnly ? 'Offline-only mode' : 'Cache-first mode'} · Ready = exact meanings + MP3. Percentages use unique words; this view never downloads resources.</p>
       <p className="muted">Background pacing: {coverage.pacingMultiplier}× baseline · {coverage.requestCounts.challenge ?? 0} detected challenges · {coverage.requestCounts.denied ?? 0} HTTP 403 denials · {coverage.requestCounts.rate_limited ?? 0} rate limits. Interactive lookups use independent pacing and pauses.</p>
       {coverage.cooldownUntil > Date.now() / 1000 ? <div className="notice notice--error">{coverage.cooldownReason} · Retry after {date(coverage.cooldownUntil)}</div> : null}

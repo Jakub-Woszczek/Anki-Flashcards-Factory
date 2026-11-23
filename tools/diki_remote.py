@@ -4,7 +4,13 @@ import argparse
 import json
 import os
 
-from backend.settings import load_environment
+from backend.settings import diki_coverage_inventory, load_environment
+from external_apis.diki_inventory import (
+    export_inventory,
+    import_inventory,
+    load_inventory,
+    save_inventory,
+)
 from external_apis.diki_lists import discover_lists
 from external_apis.diki_remote import RemoteDownloads, RemoteError
 from external_apis.diki_resources import DikiResources, normalize_word
@@ -36,9 +42,41 @@ def main(argv=None):
     )
     pull.add_argument("--max-batches", type=int, default=100)
     commands.add_parser("status")
+    commands.add_parser("export-coverage", help="Explicitly export normal Anki English words once")
+    coverage = commands.add_parser(
+        "coverage", help="Submit only missing HTML from the existing-note inventory"
+    )
+    coverage.add_argument("--file", help="Load an explicit UTF-8 word file (relative to data root)")
+    coverage.add_argument(
+        "--retry-failed", action="store_true", help="Explicitly retry failed HTML coverage jobs"
+    )
+    coverage.add_argument(
+        "--redownload-delivered",
+        action="store_true",
+        help="Explicitly restore delivered HTML missing locally",
+    )
     args = parser.parse_args(argv)
     client = None
     try:
+        if args.command == "export-coverage":
+            from external_apis.anki_connect import AnkiConnect
+
+            inventory = export_inventory(AnkiConnect())
+            save_inventory(inventory)
+            print(
+                json.dumps(
+                    {
+                        "path": str(diki_coverage_inventory()),
+                        "words": len(inventory["words"]),
+                        "invalidCount": inventory["invalidCount"],
+                        "invalidSamples": inventory["invalidSamples"],
+                    },
+                    indent=2,
+                )
+            )
+            return 1 if inventory["invalidCount"] else 0
+        if args.command == "coverage" and args.file:
+            import_inventory(args.file)
         client = RemoteDownloads(args.url, os.getenv("DIKI_REMOTE_TOKEN", ""))
         if args.command == "status":
             result = client.status()
@@ -47,6 +85,21 @@ def main(argv=None):
             with DikiResources(args.cache_dir, offline=True) as resources:
                 if args.command == "pull":
                     result = client.pull(resources, max_batches=args.max_batches)
+                elif args.command == "coverage":
+                    client.require_scheduling()
+                    inventory = load_inventory()
+                    if not inventory["available"]:
+                        raise ValueError(
+                            "Export an existing-note inventory or supply coverage --file first"
+                        )
+                    result = client.submit(
+                        inventory["words"],
+                        resources,
+                        html_only=True,
+                        priority="coverage",
+                        retry_failed=args.retry_failed,
+                        redownload=args.redownload_delivered,
+                    )
                 else:
                     if args.words:
                         words = [normalize_word(word) for word in args.words]

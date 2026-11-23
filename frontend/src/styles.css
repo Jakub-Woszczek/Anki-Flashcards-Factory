@@ -99,6 +99,9 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .status-pill::before { width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: #9aabab; content: ""; }
 .status-pill--ready { border-color: #b7cc75; color: #4d6812; }
 .status-pill--ready::before { background: var(--lime-deep); }
+.status-pill--error { border-color: var(--coral); color: #913d2c; }
+.status-pill--error::before { background: var(--coral); }
+.node-health:not(:disabled):hover { background: var(--paper); }
 
 .hero { max-width: 790px; margin: 0 0 48px; }
 .eyebrow { margin: 0 0 9px; color: var(--blue); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.69rem; font-weight: 800; letter-spacing: 0.1em; line-height: 1.25; }

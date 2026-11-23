@@ -58,7 +58,7 @@ class ApiAdapter(BaseAdapter):
             raise requests.ConnectionError("Simulated interrupted transfer")
         result = self.api.request(
             request.method,
-            path,
+            path + ("?" + urlsplit(request.url).query if urlsplit(request.url).query else ""),
             headers=dict(request.headers),
             content=request.body,
             follow_redirects=False,

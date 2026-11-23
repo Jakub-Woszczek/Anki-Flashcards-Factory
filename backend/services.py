@@ -7,7 +7,7 @@ import threading
 import time
 from collections import Counter
 from functools import wraps
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from backend.note_index import NotesDatabase
 from backend.storage import SessionStore, SourceChanged
@@ -17,6 +17,9 @@ from external_apis.diki_api import DikiApi
 from external_apis.diki_entries import MatchingHeadword
 from external_apis.diki_resources import ResourceError
 from external_apis.gemini_api import GeminiBot
+
+if TYPE_CHECKING:
+    from backend.remote_preparation import RemotePreparation
 
 SYNC_COOLDOWN_SECONDS = 10
 
@@ -59,6 +62,7 @@ class FactoryService:
         self._sync_dirty = False
         self._last_sync_at: float | None = None
         self._sync_error: str | None = None
+        self.remote_preparation: RemotePreparation | None = None
 
     def _ensure_sync_state(self):
         # Some focused tests construct the service without __init__.
@@ -780,6 +784,7 @@ class FactoryService:
             )
             result["removedLines"] = 1
             result["cleanupPending"] = False
+            self._notify_remote_preparation()
         except (OSError, UnicodeError, sqlite3.Error, SourceChanged) as error:
             result.update(
                 cleanupPending=True,
@@ -867,7 +872,14 @@ class FactoryService:
     @source_action
     def discard_current(self, session_id: str, *, entry_id: str | None = None):
         session = self.sessions.require_current(session_id, entry_id)
-        return self.sessions.complete_current(session_id, session["current"]["id"])
+        result = self.sessions.complete_current(session_id, session["current"]["id"])
+        self._notify_remote_preparation()
+        return result
+
+    def _notify_remote_preparation(self):
+        preparation = getattr(self, "remote_preparation", None)
+        if preparation is not None:
+            preparation.notify()
 
     @source_action
     def create_custom_card(

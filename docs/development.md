@@ -8,6 +8,25 @@ The standard check/test commands, hooks, and CI now enforce network isolation (`
 
 ## Project-local quality tooling
 
+The 2026-11-23 node-header health check passed Ruff lint/format (63 Python files),
+Pyright with zero errors/warnings, 283 tests (277 passed, 6 skipped), and frontend
+TypeScript/Vite build. Seven added offline regressions cover authenticated bounded
+status requests, missing/partial configuration, auth/timeout/malformed responses,
+health versus scheduling/cooldown, and a separate backend route with no Anki or
+scheduler actions. Credentials stay backend-side and all HTTP was fake. See
+[Node connection indicator](features/remote-downloads.md#node-connection-indicator).
+
+The 2026-11-23 automatic scheduling check passed Ruff lint/format (61 Python files),
+Pyright with zero errors/warnings, 276 tests (270 passed, 6 opt-in checks skipped),
+and frontend TypeScript/Vite build. Twenty-five added regressions cover occurrence
+windows, partial coverage and safe capitalization reuse, note-type export scope and
+invalid fields, priority/promotion/generation isolation, a multi-batch finite drain,
+lost ACK/cancellation recovery, source/lifespan hooks, nonblocking shutdown, cache
+lock boundaries, immediate import, durable submission deduplication, and broken
+book isolation. Integrations and mutable data were fake/temporary; the guarded
+runner also clears inherited remote credentials. No real inventory export or live
+Diki/Anki call was made. See [ADR 0009](decisions/0009-remote-preparation-scheduling.md).
+
 The 2026-11-22 Northflank downloader restoration passed the full check: Ruff
 lint/format (58 Python files), Pyright with zero errors/warnings, 251 tests
 (245 passed, 6 skipped), and frontend TypeScript/Vite build. The skipped tests

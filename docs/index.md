@@ -40,6 +40,7 @@ distinguish confirmed requirements, current behavior, open decisions, and gaps.
 - [ADR 0006: Separate data root](decisions/0006-separate-data-root.md)
 - [ADR 0007: Diki result recognition and choices](decisions/0007-diki-result-recognition.md)
 - [ADR 0008: Selected-entry alternatives and existing notes](decisions/0008-diki-entry-alternatives-and-existing-notes.md)
+- [ADR 0009: Automatic remote preparation and immediate background import](decisions/0009-remote-preparation-scheduling.md)
 - [Roadmap and deferred discussions](roadmap.md): future ideas and open decisions.
 - [Loose thoughts and possible work](todo.md): the owner's pending ideas and reminders, not implementation plans.
 - [Development-history baseline](review.md#repository-evidence-baseline): recent steps and commit evidence.

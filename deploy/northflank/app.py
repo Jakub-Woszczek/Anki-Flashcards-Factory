@@ -6,7 +6,7 @@ import secrets
 from contextlib import asynccontextmanager
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr
 
@@ -30,6 +30,7 @@ class Job(BaseModel):
     audio_plan: AudioPlan | None = None
     html: StrictStr | None = Field(default=None, max_length=700000)
     html_status: Literal[200, 404] = 200
+    priority: Literal["buffer", "coverage"] = "buffer"
 
 
 class Submit(BaseModel):
@@ -139,13 +140,17 @@ def create_app(service, *, run_worker=True):
             raise HTTPException(422, "Invalid word, audio plan, or cached HTML seed") from None
 
     @app.get("/v1/transfers/next")
-    def next_transfer():
-        result = service.next_transfer()
+    def next_transfer(drain_id: str | None = Query(default=None, pattern=r"^[a-f0-9]{32}$")):
+        result = service.next_transfer(drain_id=drain_id)
         return (
             Response(status_code=204)
             if result is None
             else JSONResponse(result, headers={"Cache-Control": "no-store"})
         )
+
+    @app.post("/v1/transfers/drain")
+    def begin_drain():
+        return service.begin_drain()
 
     @app.get("/v1/transfers/{batch_id}/files/{job_id}/{kind}")
     def blob(batch_id: str, job_id: str, kind: Literal["html", "audio"]):
