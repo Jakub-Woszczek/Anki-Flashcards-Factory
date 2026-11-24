@@ -5,6 +5,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from backend.existing_note_coverage import ExistingNoteCoverage
+from backend.offline_coverage import OfflineCoverage
 from backend.remote_health import check_remote_node
 from backend.remote_preparation import RemotePreparation
 from backend.schemas import (
@@ -26,7 +28,7 @@ from backend.schemas import (
 )
 from backend.services import FactoryService, ServiceError
 from backend.settings import ROOT_DIR, load_environment
-from external_apis.diki_lists import coverage
+from external_apis.anki_connect import AnkiConnect
 
 load_environment()
 service = FactoryService()
@@ -36,11 +38,26 @@ service = FactoryService()
 async def lifespan(application: FastAPI):
     preparation = RemotePreparation.from_environment(service.diki.resources.root)
     service.remote_preparation = preparation
-    if preparation is not None:
-        preparation.start()
+    note_coverage = ExistingNoteCoverage(
+        service.diki.resources.root,
+        AnkiConnect,
+        service.notes,
+        on_reconciled=preparation.notify if preparation is not None else None,
+    )
+    application.state.note_coverage = note_coverage
+    local_coverage = OfflineCoverage(service.diki.resources.root)
+    application.state.local_coverage = local_coverage
     try:
+        note_coverage.start()
+        local_coverage.start()
+        if preparation is not None:
+            preparation.start()
         yield
     finally:
+        note_coverage.close()
+        local_coverage.close()
+        application.state.note_coverage = None
+        application.state.local_coverage = None
         if preparation is not None:
             preparation.close()
         service.remote_preparation = None
@@ -78,7 +95,12 @@ def remote_node_health():
 
 @app.get("/backend/offline-coverage")
 def offline_coverage():
-    result = coverage(service.diki.resources)
+    local_coverage = getattr(app.state, "local_coverage", None)
+    if local_coverage is None:
+        raise HTTPException(status_code=503, detail="Local coverage worker is not running")
+    result = local_coverage.status()
+    note_coverage = getattr(app.state, "note_coverage", None)
+    result["existingNotes"] = note_coverage.status() if note_coverage is not None else None
     preparation = getattr(service, "remote_preparation", None)
     result["remotePreparation"] = (
         preparation.status() if preparation is not None else {"enabled": False}

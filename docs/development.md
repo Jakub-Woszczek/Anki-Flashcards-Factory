@@ -1,12 +1,31 @@
 # Development and verification
 
-Last updated: 2026-11-22.
+Last updated: 2026-11-24.
 
 Status: default test boundary confirmed by the owner in interview batch 21.
 Legacy live tests were retired on 2026-11-19 and current discovery passes offline.
 The standard check/test commands, hooks, and CI now enforce network isolation (`T-002`).
 
 ## Project-local quality tooling
+
+The 2026-11-24 loading-progress follow-up passed the full project check: Ruff
+lint/format (67 Python files), Pyright with zero errors/warnings, 304 tests
+(298 passed, 6 skipped), and the frontend TypeScript/Vite build. Six added offline
+regressions cover actual per-stage totals, zero work, nonblocking/coalesced scans,
+retained results and surfaced errors, cancellation, and note-classification counts.
+Route/lifespan regressions also verify the in-memory response and worker ownership.
+See [loading progress](features/offline-cache.md#loading-progress).
+
+The 2026-11-24 strict existing-note HTML coverage check passed Ruff lint/format
+(65 Python files), Pyright with zero errors/warnings, 297 tests (291 passed,
+6 skipped), and the frontend TypeScript/Vite build. Fourteen added offline tests
+cover all HTML buckets/denominators and review identities, stale metadata,
+case-distinct keys, corrupt/replaced resources, saved-first publication, inventory
+changes, failed/partial/profile-changing Anki reads, legacy upgrades, cancellation,
+read-only advisory-index comparison, lifespan, and independent local status.
+All Anki/Diki integrations were fake and mutable state temporary. No personal
+inventory was exported for verification. See
+[strict existing-note coverage](features/offline-cache.md#strict-coverage-for-existing-anki-notes).
 
 The 2026-11-23 node-header health check passed Ruff lint/format (63 Python files),
 Pyright with zero errors/warnings, 283 tests (277 passed, 6 skipped), and frontend

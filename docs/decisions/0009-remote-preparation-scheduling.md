@@ -2,6 +2,11 @@
 
 Date: 2026-11-23. Status: accepted and implemented locally; worker rollout separate.
 
+Updated 2026-11-24: [ADR 0010](0010-existing-note-html-coverage.md) supersedes the
+explicit-export-only/no-startup-Anki-scan part of decision 3. Startup now displays
+saved coverage first, then reconciles the inventory with Anki in the background.
+The scheduling, priorities, and transfer rules below remain in force.
+
 ## Decision
 
 1. Prepare the first **100 pending nonempty occurrences in every vocabulary file**,

@@ -53,10 +53,16 @@ def discover_lists(directory=None, *, entry_limit: int | None = None) -> list[Wo
     return lists
 
 
-def coverage(resources: DikiResources, lists=None):
+def coverage(resources: DikiResources, lists=None, *, progress=None):
+    if progress is not None:
+        progress("Discovering vocabulary lists", 0, None)
     lists = discover_lists() if lists is None else lists
-    snapshot = resources.snapshot(profile="background")
+    snapshot = resources.snapshot(profile="background", progress=progress)
     rows = []
+    total = sum(len(source.words) for source in lists)
+    completed = 0
+    if progress is not None:
+        progress("Calculating list coverage", completed, total)
     for source in lists:
         row = {
             "name": source.name,
@@ -86,6 +92,9 @@ def coverage(resources: DikiResources, lists=None):
             row["pending"] += int(
                 not has_html or (exact and not has_audio and audio.get("state") != "no_audio")
             )
+            completed += 1
+            if progress is not None:
+                progress("Calculating list coverage", completed, total)
         row["percent"] = round(100 * row["ready"] / row["total"], 1) if row["total"] else 0
         rows.append(row)
     return {

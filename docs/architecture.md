@@ -134,8 +134,12 @@ consumption without calling Anki, including after a restart.
   meanings/resources remain separate; see [ADR 0005](decisions/0005-diki-headwords-and-case.md).
 - Custom/edited Polish text remains possible; selection-only is a tentative decision.
 - Local standalone prefetch remains list-driven. The remote coordinator implements
-  bounded buffers and the one-time existing-note HTML tier; full population and
+  bounded buffers and the saved existing-note HTML tier; full population and
   deployment of the scheduling-capable worker are separate operational steps.
+- Existing-note HTML coverage now publishes saved-first statistics, then reconciles
+  the note inventory with Anki once per launch and reports advisory-index
+  discrepancies. Dashboard refreshes inspect local HTML only. See
+  [ADR 0010](decisions/0010-existing-note-html-coverage.md).
 - Acknowledged-create confirmation-fetch failures warn and continue (`S-001`);
   source-removal failures expose a local-only retry with precise error feedback.
 - Detailed review-completion mechanics and some failure/preservation rules still need owner input.

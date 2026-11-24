@@ -169,7 +169,10 @@ class TestSourceAPI(TestCase):
 
     def test_application_lifespan_owns_one_scheduler_and_closes_it_before_integrations(self):
         preparation = Mock()
+        note_coverage = Mock()
+        local_coverage = Mock()
         self.service.diki = Mock()
+        self.service.notes = Mock()
         self.service.flush_sync = Mock()
 
         async def lifecycle():
@@ -178,14 +181,73 @@ class TestSourceAPI(TestCase):
                 patch.object(
                     self.routes.RemotePreparation, "from_environment", return_value=preparation
                 ) as configure,
+                patch.object(
+                    self.routes, "ExistingNoteCoverage", return_value=note_coverage
+                ) as factory,
+                patch.object(
+                    self.routes, "OfflineCoverage", return_value=local_coverage
+                ) as local_factory,
             ):
                 async with self.routes.lifespan(self.routes.app):
                     self.assertIs(self.service.remote_preparation, preparation)
                     preparation.start.assert_called_once_with()
                     preparation.close.assert_not_called()
+                    note_coverage.start.assert_called_once_with()
+                    note_coverage.close.assert_not_called()
+                    local_coverage.start.assert_called_once_with()
+                    local_coverage.close.assert_not_called()
                 configure.assert_called_once_with(self.service.diki.resources.root)
+                factory.assert_called_once_with(
+                    self.service.diki.resources.root,
+                    self.routes.AnkiConnect,
+                    self.service.notes,
+                    on_reconciled=preparation.notify,
+                )
+                local_factory.assert_called_once_with(self.service.diki.resources.root)
             preparation.close.assert_called_once_with()
+            note_coverage.close.assert_called_once_with()
+            local_coverage.close.assert_called_once_with()
             self.service.diki.resources.close.assert_called_once_with()
             self.assertIsNone(self.service.remote_preparation)
 
         asyncio.run(lifecycle())
+
+    def test_note_coverage_starts_without_remote_configuration_and_route_reads_saved_status(self):
+        note_coverage = Mock()
+        note_coverage.status.return_value = {"available": True, "total": 3, "entries": 2}
+        local_coverage = Mock()
+        local_coverage.status.return_value = {
+            "lists": [],
+            "loading": True,
+            "progress": {
+                "stage": "Checking cached resources",
+                "processed": 10,
+                "total": 40,
+            },
+        }
+        self.service.diki = Mock()
+        self.service.notes = Mock()
+        self.service.flush_sync = Mock()
+
+        async def lifecycle():
+            with (
+                patch.object(self.routes, "service", self.service),
+                patch.object(self.routes.RemotePreparation, "from_environment", return_value=None),
+                patch.object(self.routes, "ExistingNoteCoverage", return_value=note_coverage),
+                patch.object(self.routes, "OfflineCoverage", return_value=local_coverage),
+            ):
+                async with self.routes.lifespan(self.routes.app):
+                    result = self.routes.offline_coverage()
+                    self.assertEqual(result["existingNotes"], note_coverage.status.return_value)
+                    self.assertEqual(result["remotePreparation"], {"enabled": False})
+                    self.assertEqual(result["progress"]["processed"], 10)
+                    self.assertTrue(result["loading"])
+                    self.service.diki.resources.snapshot.assert_not_called()
+                    local_coverage.status.assert_called_once_with()
+                    note_coverage.start.assert_called_once_with()
+                    note_coverage.status.assert_called_once_with()
+            note_coverage.close.assert_called_once_with()
+            local_coverage.close.assert_called_once_with()
+
+        asyncio.run(lifecycle())
+        self.assertEqual(self.service.anki.mock_calls, [])

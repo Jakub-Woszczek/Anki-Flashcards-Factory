@@ -1,6 +1,6 @@
 # Feature map and specification coverage
 
-Last updated: 2026-11-23.
+Last updated: 2026-11-24.
 
 This is a living capability inventory. "Present" means observed in code or live
 Anki where noted, not that every path meets its intended contract or was freshly
@@ -17,7 +17,8 @@ tested. Specification status and implementation status are separate.
 | Save completion and recovery | Complete processed entries with useful feedback | `S-001` implemented: acknowledged creation with unavailable confirmation warns precisely and advances; actual mismatches/updates remain strict. Local source-removal failure has an explicit restart-safe retry |
 | Tag/flag review | Revisit items marked during study for later editing, deleting, or reconsideration | Present; red/orange both mean attention needed. Exact completion behavior remains open. [Feature](features/marked-note-review.md) |
 | LLM assistance | Quickly understand words and disparate Polish alternatives | Present via optional Gemini integration; purpose confirmed. [Feature](features/llm-assistance.md) |
-| Resource cache and prefetch | Offline additions plus reusable source data for old-note checks | Shared retained HTML/audio plus automatic 100-entry-per-file remote preparation and one-time existing-note HTML inventory. Population/worker rollout is separate. [Feature](features/offline-cache.md) |
+| Resource cache and prefetch | Offline additions plus reusable source data for old-note checks | Shared retained HTML/audio plus automatic 100-entry-per-file remote preparation and saved existing-note HTML inventory. Population/worker rollout is separate. [Feature](features/offline-cache.md) |
+| Existing-note HTML coverage | See strict entries coverage and manually review other HTML categories | Percentage bar/count legend with separate missing/unusable HTML; category-filterable note list hides missing downloads by default. Saved-first startup statistics, then one background Anki/inventory/local-index comparison. Background cache/note scans show [measured loading progress](features/offline-cache.md#loading-progress). [Feature](features/offline-cache.md#strict-coverage-for-existing-anki-notes), [ADR 0010](decisions/0010-existing-note-html-coverage.md) |
 | Remote dictionary preparation | Fetch while the Mac sleeps and import completed work in background | Priority buffers/coverage, one finite startup drain with immediate import/ACK, asynchronous replenishment, and recovery. Original manual path verified live; updated worker required for scheduling. [Feature](features/remote-downloads.md) |
 | Node connection status | See whether the remote API is reachable and authenticated | Header status button checks on appearance/click, with independent short-timeout status requests and no dictionary fetching. [Details](features/remote-downloads.md#node-connection-indicator) |
 | Separate code/data storage | Keep mutable vocabulary, resources, and recovery data out of code commits | Implemented: one required `ANKI_FACTORY_DATA_DIR`; durable data including HTML/MP3 and SQLite is versioned separately. [Layout and migration](features/data-storage.md) |
@@ -43,6 +44,8 @@ Contracts and ADRs retain ownership of detailed rules and decisions.
 
 | Completed | Change | Documentation |
 | --- | --- | --- |
+| 2026-11-24 | Added real per-stage loading bars and processed/remaining counts; moved pending-list coverage out of the HTTP request into a coalesced background scan | [Loading progress](features/offline-cache.md#loading-progress) |
+| 2026-11-24 | Added strict existing-note HTML category coverage, manual-review list, and saved-first startup reconciliation; simplified Offline downloads text | [Existing-note HTML coverage](features/offline-cache.md#strict-coverage-for-existing-anki-notes), [ADR 0010](decisions/0010-existing-note-html-coverage.md) |
 | 2026-11-23 | Added the header Node health/check button beside Anki and Gemini | [Node connection indicator](features/remote-downloads.md#node-connection-indicator) |
 | 2026-11-23 | Implemented automatic 100-entry buffers, resource-aware priority scheduling, one-time HTML inventory, and one startup drain with immediate import/ACK | [Remote scheduling](features/remote-downloads.md#automatic-scheduling--2026-11-23), [ADR 0009](decisions/0009-remote-preparation-scheduling.md) |
 | 2026-11-22 | Restored and ported the stashed Northflank downloader to current imports, paths, and dictionary recognition while retaining queue/transfer behavior | [Remote downloader](features/remote-downloads.md) |

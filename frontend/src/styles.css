@@ -148,6 +148,40 @@ h1, h2, h3 { color: var(--navy-deep); }
 .offline-table .offline-error { color: var(--coral); }
 .offline-run { margin-top: 18px; font-size: 0.8rem; color: #50646a; line-height: 1.7; }
 .offline-run span { display: block; }
+.coverage-loading { margin: 12px 0 22px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 5px; background: var(--paper); color: var(--blue); font-size: 0.8rem; }
+.coverage-loading > div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 18px; margin-bottom: 10px; }
+.coverage-loading span { color: #50646a; font-variant-numeric: tabular-nums; }
+.coverage-loading progress { display: block; width: 100%; height: 12px; accent-color: var(--blue); }
+.existing-coverage { margin-bottom: 28px; padding-bottom: 24px; border-bottom: 1px solid var(--line); }
+.existing-coverage__heading, .existing-coverage__review-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.existing-coverage h3, .existing-coverage h4 { margin: 0; }
+.existing-coverage .muted { font-size: 0.8rem; line-height: 1.5; }
+.existing-coverage__goal { color: var(--lime-deep); font-size: 1.05rem; }
+.existing-coverage__goal span, .existing-coverage h4 span { color: #50646a; font-size: 0.8rem; font-weight: 500; }
+.html-coverage-bar { display: flex; width: 100%; height: 30px; margin: 18px 0; overflow: hidden; border-radius: 5px; background: var(--soft-line); }
+.html-coverage-bar > span { height: 100%; }
+.html-category--entries { background: var(--lime-deep); }
+.html-category--suggestions { background: var(--gold); }
+.html-category--related { background: #6594b3; }
+.html-category--collocation { background: #8c76a5; }
+.html-category--not_found { background: var(--coral); }
+.html-category--unknown { background: var(--navy); }
+.html-category--missing { background: #a3b0b1; }
+.html-category--unusable { background: #b34a63; }
+.html-category--unprocessable { background: #8d4a34; }
+.html-coverage-legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 10px 24px; padding: 0; margin: 0 0 24px; list-style: none; font-size: 0.8rem; }
+.html-coverage-legend li { display: flex; align-items: center; gap: 8px; }
+.html-coverage-legend strong { margin-left: auto; white-space: nowrap; }
+.html-coverage-legend small { min-width: 32px; text-align: right; color: #50646a; }
+.html-coverage-swatch { flex: 0 0 12px; height: 12px; border-radius: 2px; }
+.existing-coverage__review-heading label { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 0.8rem; }
+.existing-coverage select { max-width: 100%; padding: 6px; border: 1px solid var(--line); border-radius: 3px; background: var(--paper); color: var(--ink); }
+.existing-coverage__notes { max-height: 420px; overflow: auto; }
+.existing-coverage__notes thead { position: sticky; top: 0; background: var(--paper); }
+.existing-coverage__notes tbody th { width: 38%; }
+.existing-coverage__notes td { white-space: normal; overflow-wrap: anywhere; }
+.existing-coverage__index { margin-top: 18px; font-size: 0.8rem; }
+.existing-coverage__index summary { cursor: pointer; color: var(--blue); }
 
 .panel {
   border: 1px solid var(--line);

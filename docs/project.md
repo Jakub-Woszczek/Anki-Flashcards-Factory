@@ -90,10 +90,13 @@ The Diki cache has two primary goals:
    without downloading the same pages on every run.
 
 Existing-note source data is part of the intended scope, not merely an incidental
-performance benefit. An explicit one-time inventory and remote preparation now
+performance benefit. A saved inventory and remote preparation now
 support filling only missing HTML; complete existing-collection coverage is not
 established merely by implementing that mechanism. See
 [cache and background preparation](features/offline-cache.md).
+Since 2026-11-24, startup publishes saved strict HTML statistics first, then
+reconciles the inventory with Anki in background. Notes outside `entries` are
+listed for manual review; this does not automatically replace retained source.
 
 The owner confirmed first-100-entry windows for every pending vocabulary file on
 2026-11-23, refining the original rough main/book buffer target. Those HTML/audio

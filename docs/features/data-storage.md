@@ -39,7 +39,7 @@ All paths below are relative to the configured data root:
 | `anki_flashcards_factory.sqlite3` | Workspace settings/drafts, index, save/removal recovery | Track |
 | `diki_cache/html/`, `diki_cache/audio/` | Retained raw HTML and MP3 snapshots | **Track both** |
 | `diki_cache/index.sqlite3` | Digests/provenance, discovery, retries, cooldowns, pacing, request history | Track |
-| `diki_cache/coverage/inventory.json` | Explicit one-time existing-note word inventory and bounded export diagnostics | Track |
+| `diki_cache/coverage/inventory.json` | Saved existing-note inventory: note IDs/English values/models/errors and preparation word list; refreshed by explicit export or startup reconciliation | Track |
 | `diki_cache/remote-imports/` | Durable incomplete-transfer payloads/manifests and reconciliation journals, removed after ACK | Track consistent unfinished state |
 | `archives/` | Exact source backups and historical migrations | Track |
 | `backups/` | Deliberate Anki/database snapshots and split manifest | Track |

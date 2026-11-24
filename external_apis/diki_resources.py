@@ -909,7 +909,7 @@ class DikiResources:
                 }
         return self._fetch(word, "audio", False, audio_plan=plan)
 
-    def snapshot(self, *, profile=None):
+    def snapshot(self, *, profile=None, progress=None):
         """Local metadata only; missing/truncated files never count as downloaded."""
         with self.db() as db:
             rows = [dict(row) for row in db.execute("SELECT * FROM resources")]
@@ -924,7 +924,9 @@ class DikiResources:
             }
         html_digests = {row["word"]: row["digest"] for row in rows if row["kind"] == "html"}
         result = {}
-        for row in rows:
+        if progress is not None:
+            progress("Checking cached resources", 0, len(rows))
+        for completed, row in enumerate(rows, 1):
             row = self._resource_view(
                 row,
                 failures.get((row["word"], row["kind"])),
@@ -954,7 +956,18 @@ class DikiResources:
                         )
                     )
             result[(row["word"], row["kind"])] = row
-        for (word, kind), row in result.items():
-            if kind == "audio" and row["state"] == "ready" and not self._audio_matches(word):
+            if progress is not None:
+                progress("Checking cached resources", completed, len(rows))
+        recordings = [
+            (word, row)
+            for (word, kind), row in result.items()
+            if kind == "audio" and row["state"] == "ready"
+        ]
+        if progress is not None:
+            progress("Checking recording provenance", 0, len(recordings))
+        for completed, (word, row) in enumerate(recordings, 1):
+            if not self._audio_matches(word):
                 row["state"] = "pending"
+            if progress is not None:
+                progress("Checking recording provenance", completed, len(recordings))
         return result

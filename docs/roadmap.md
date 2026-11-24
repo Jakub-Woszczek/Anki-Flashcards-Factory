@@ -68,8 +68,12 @@ Implemented locally on 2026-11-23: an explicit one-time normal-note word invento
 missing-HTML coverage jobs below recurring first-100-entry windows in every source,
 and automatic startup transfers with immediate background cache import/ACK.
 Existing retained HTML is reused. Full corpus population remains an operational
-goal, not a claim of completed coverage; updated worker deployment and explicit
-inventory export are needed. See [remote scheduling](features/remote-downloads.md)
+goal, not a claim of completed coverage; updated worker deployment and a successful
+inventory export/reconciliation are needed. Since 2026-11-24, saved-first strict
+HTML statistics and a manual-review list are implemented, followed by one
+background Anki/inventory/index comparison per launch. See
+[strict HTML coverage](features/offline-cache.md#strict-coverage-for-existing-anki-notes),
+[remote scheduling](features/remote-downloads.md)
 and [ADR 0009](decisions/0009-remote-preparation-scheduling.md).
 
 ## Future discussion: example sentences in Anki notes

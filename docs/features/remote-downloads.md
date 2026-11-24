@@ -1,6 +1,6 @@
 # Remote Diki downloader
 
-Last updated: 2026-11-23. Manual downloads verified live; automatic scheduling
+Last updated: 2026-11-24. Manual downloads verified live; automatic scheduling
 implemented locally and requires an updated worker deployment.
 
 The owner requested restoring the Northflank downloader from stash
@@ -73,9 +73,13 @@ panel without blocking vocabulary processing.
 - Explicit `export-coverage` reads normal Anki note types once and saves
   `diki_cache/coverage/inventory.json`. Missing-Diki and image-only types are excluded.
   Invalid/unprocessable English fields are reported; notes are not changed. An
-  already prepared word list can be loaded with `coverage --file`.
-- Startup reads that saved file without querying Anki and submits **only missing
-  HTML**, reusing partial cache coverage and safe capitalization aliases. The
+  already prepared word list can be loaded with `coverage --file`. Since
+  2026-11-24, the separate [existing-note coverage worker](offline-cache.md#strict-coverage-for-existing-anki-notes)
+  also reconciles this export with Anki once per launch, after publishing saved
+  statistics. Version 2 retains note IDs/fields/errors alongside the word list.
+- The remote scheduler reads that saved file and submits **only missing HTML**,
+  reusing partial cache coverage and safe capitalization aliases. Successful
+  inventory reconciliation notifies it to reconsider the refreshed word list. The
   inventory is outside `words_to_add/` and cannot become a consuming source queue.
 - Eligible buffer jobs precede eligible coverage jobs, FIFO within each class.
   Existing manual jobs default to buffer priority. Running requests, retry delays,
@@ -104,8 +108,10 @@ recover through durable journals. Changed audio-only source HTML still blocks AC
 
 Shutdown signals cancellation without joining network waits, importing an exit
 backlog, or intentionally deferring ACKs. The existing Anki sync flow is independent.
-The offline panel reports local submission/drain state, counts, inventory presence,
-invalid notes, and errors without contacting Northflank when it refreshes.
+The offline panel now emphasizes strict existing-note HTML coverage and its
+manual-review list. The routine submission/drain summary was removed at the
+owner's request on 2026-11-24; actual errors remain visible. Refreshing it does not
+contact Northflank.
 
 Scheduling needs a worker reporting `schedulingVersion: 1`. Additive migrations
 preserve jobs, manifests, receipts, and budgets. Protocol-2 artifacts and existing
@@ -114,7 +120,8 @@ manual APIs stay supported. Publishing/redeploying code remains an owner operati
 After updating the worker:
 
 ```bash
-# Explicit read-only Anki export, once. No dictionary fetch or note changes.
+# Optional explicit read-only Anki export. Startup can also create/reconcile it.
+# No dictionary fetch or note changes from the export itself.
 .ankiFac/bin/python -m tools.diki_remote export-coverage
 # Normal launches then reconcile, submit, and drain automatically.
 .ankiFac/bin/python main.py --app

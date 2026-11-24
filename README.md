@@ -224,8 +224,35 @@ Anki ani kolejkami sesji.
 Panel **Offline downloads** na stronie glownej pokazuje dla kazdej listy:
 liczbe pobranych HTML i MP3, procent gotowych slow (dokladne znaczenie + MP3),
 brak dokladnego dopasowania, brak nagrania, bledy przejsciowe oraz ostatnia partie.
-Odswieza sie co minute i nie wykonuje zadan do Diki ani Anki. Procenty liczone sa
-po unikalnych slowach; duplikaty i wspolne slowa w roznych listach pobierane sa raz.
+Procenty dla list liczone sa po unikalnych slowach; wspolne slowa w roznych listach
+pobierane sa raz.
+
+Sekcja **Existing Anki notes** pokazuje pasek procentowy kategorii HTML oraz liste
+notatek poza `entries`, filtrowana po kategorii. Tylko `entries` spelnia cel;
+sugestie, related, collocation, not found, unknown, brak HTML, niezdatny HTML i bledne
+pole angielskie maja oddzielne liczniki. Procenty odnosza sie do notatek dwoch
+normalnych typow slownictwa, nie do kart ani nagran MP3. Lista podaje angielskie
+slowo, ID notatki, typ i powod do recznej oceny. Brak HTML oznacza brak lokalnego
+pliku; niezdatny HTML oznacza istniejacy plik, ktorego nie mozna odczytac lub
+zweryfikowac. Domyslny filtr **Needs review** ukrywa brakujace pobrania; mozna je
+pokazac przez **Missing HTML** lub **All outside entries**. Pasek procentowy nadal
+uwzglednia wszystkie notatki, takze bez pobranego HTML.
+
+Podczas ladowania panel pokazuje rzeczywisty postep etapu: liczbe przetworzonych
+elementow, pozostale elementy i procent. Walidacja cache, sprawdzanie nagran,
+obliczanie pokrycia list i klasyfikacja notatek maja osobne liczniki. Gdy suma nie
+jest jeszcze znana, pasek jest nieokreslony. Skanowanie list odbywa sie w tle;
+odpytywanie postepu co sekunde nie uruchamia kolejnych skanow. Przy odswiezaniu
+poprzednie statystyki pozostaja widoczne.
+
+Przy starcie osobne zadanie tla najpierw pokazuje zapisany eksport i lokalne
+statystyki, nastepnie raz odczytuje Anki, aktualizuje eksport i porownuje lokalny
+indeks notatek. Rozbieznosci indeksu sa raportowane; automatyczna naprawa nie jest
+wykonywana. Data/profil snapshotu i bledy pozostaja widoczne, gdy Anki jest
+niedostepne. Gdy panel jest bezczynny, odpytywanie odbywa sie co okolo minute;
+nowy skan lokalny moze ruszyc dopiero 60 sekund po zakonczeniu poprzedniego,
+bez ponownego skanowania Anki i bez zadan do Diki. Szczegoly:
+[strict existing-note coverage](docs/features/offline-cache.md#strict-coverage-for-existing-anki-notes).
 
 ### Reczne pobieranie
 

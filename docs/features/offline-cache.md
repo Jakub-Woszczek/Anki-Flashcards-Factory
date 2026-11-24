@@ -1,9 +1,9 @@
 # Diki cache and background preparation
 
-Last updated: 2026-11-23.
+Last updated: 2026-11-24.
 
 Specification status: first 100 pending entries per file, buffer-first priority,
-one-time existing-note HTML inventory, and rolling-snapshot retention confirmed.
+saved-first existing-note HTML inventory, and rolling-snapshot retention confirmed.
 Automatic remote scheduling is implemented; worker rollout and actual full
 inventory population are separate operational steps.
 
@@ -51,7 +51,7 @@ Polish alternatives with stored content.
 
 Repeated checks, tests, and future refinement work should reuse downloaded HTML
 instead of downloading it on every run. Retaining raw source allows changed parser
-or contract logic to run against the same local material. The one-time existing-note
+or contract logic to run against the same local material. The saved existing-note
 backlog requests HTML only; recordings are requested for pending-word buffers.
 
 This dataset supports future checks; it does not mean that compatibility audits,
@@ -80,7 +80,8 @@ produce durable diagnostics. See [Diki result recognition](diki-results.md).
 | Current prefetch input | Discovers `.txt` lists, including books, from the configured words directory; does not query Anki for existing vocabulary | `tools/diki_prefetch.py`, `external_apis/diki_lists.py` |
 | Preparation | Bounded/resumable batches download HTML and then an advertised recording for exact matches | `tools/diki_prefetch.py` |
 | Scheduling | A launchd generator configures background runs independently of the UI | `tools/diki_launchd.py` |
-| Reporting | The dashboard measures local list coverage without fetching Diki content | `external_apis/diki_lists.py`, `frontend/src/OfflineDownloads.tsx` |
+| Reporting | Background scans measure local list coverage without fetching Diki content; the dashboard reads their progress and latest results | `backend/offline_coverage.py`, `external_apis/diki_lists.py`, `frontend/src/OfflineDownloads.tsx` |
+| Existing-note reporting | Saved-first note counts by strict HTML category, manual-review list, then one background Anki/inventory/index comparison | `backend/existing_note_coverage.py`, `external_apis/diki_inventory.py`, `backend/note_index.py` |
 | Offline mode | `DIKI_OFFLINE=1` prevents Diki fetching, including on missing resources | `DikiResources`, README |
 | Freshness | No automatic expiry; explicit successful refresh replaces the current resource for that key, rather than keeping a version history | `DikiResources.path`, `_save_locked`, prefetch `--refresh` |
 
@@ -102,7 +103,7 @@ Intended order:
 1. Prepare the first **100 nonempty pending entries of each vocabulary file**,
    including all discovered book sources, selecting before deduplication.
 2. Give those HTML/audio goals priority over existing-note HTML-only work.
-3. Use remaining eligible work for missing HTML in the one-time inventory.
+3. Use remaining eligible work for missing HTML in the saved inventory.
 
 The owner fixed the window at 100 per file on 2026-11-23, refining the earlier
 illustrative target. Duplicates share resources but occupy source positions;
@@ -152,17 +153,112 @@ See [ADR 0003: Retain a rolling Diki snapshot](../decisions/0003-rolling-diki-sn
 
 ## Existing-note inventory and current rollout boundary
 
-Explicit `tools.diki_remote export-coverage` reads the normal English vocabulary
-types once, excluding Diki-missing/image-only types, and retains a word inventory
-under the data root. Startup uses that file and existing cache coverage; it never
-scans Anki. Invalid exported English values are reported, not silently rewritten.
-The remote scheduler's two priorities implement the intended buffer/backlog split.
+`tools.diki_remote export-coverage` remains an explicit read-only export of the
+normal English vocabulary types, excluding Diki-missing/image-only types. Since
+2026-11-24, startup first reports saved coverage, then reads Anki once in background
+and refreshes this inventory. Invalid English values are reported, not silently
+rewritten. The remote scheduler's two priorities implement the buffer/backlog split.
 
 Implementation is not evidence that the owner's entire collection is covered:
-the updated worker must be deployed, the explicit inventory created, and missing
-HTML downloaded/imported over time. The standalone local prefetch remains list-
-driven. See [remote preparation](remote-downloads.md) for lifecycle, commands, and
+the updated worker must be deployed, the inventory created by startup reconciliation
+or an explicit export, and missing HTML downloaded/imported over time. The
+standalone local prefetch remains list-driven. See [remote preparation](remote-downloads.md) for lifecycle, commands, and
 the distinction between verified manual deployment and new scheduling rollout.
+
+## Strict coverage for existing Anki notes
+
+Implemented 2026-11-24; [ADR 0010](../decisions/0010-existing-note-html-coverage.md)
+owns the detailed rules. The Offline downloads panel now leads with an existing-
+note segmented bar and a legend containing percentages and note counts. Only HTML
+classified as **entries** meets the goal. Suggestions, related entries,
+collocations, not found, and unknown layouts are separate categories. **Missing
+HTML** means no local file exists; **unusable HTML** means a local file exists but
+cannot be read or integrity-verified (including files without cache metadata).
+These are separate buckets, alongside unprocessable English fields. All scoped
+notes remain in the denominator. This statistic does not depend on audio, stale
+exact-match flags, headword order, or selected Polish translations.
+
+Every note outside entries is available in the category-filterable table with its
+English value, Anki note ID, model, category, and reason. The default **Needs review**
+filter excludes missing downloads; its displayed count excludes them too. Select
+**Missing HTML** to see missing downloads or **All outside entries** to see
+everything. If only downloads are missing, the default empty state says that no
+downloaded notes need review. Missing downloads still count in the bar and its
+percentage denominator. Non-entry pages
+are retained for the owner's decision. Classification uses integrity-checked local
+bytes and the existing primary-result inspector without dictionary requests,
+automatic source replacement, or note changes.
+
+The application-scoped worker first publishes its saved note snapshot, then
+reuses the batched inventory exporter to check current Anki notes. A successful
+read atomically replaces `diki_cache/coverage/inventory.json` and updates the report.
+Version 2 stores note identities and all per-note errors while retaining the words
+array used by remote preparation. Older word-only inventories are still usable for
+downloads; the panel explains that note-based statistics require reconciliation.
+Missing inventories are created by a successful startup scan.
+
+The worker also compares Anki's snapshot with the advisory local note index and
+reports discrepancies in a collapsible table. It does not repair that index.
+Index comparison failures remain visible without discarding valid HTML statistics.
+Anki unavailability, partial responses, or profile changes preserve the saved
+snapshot, with date/profile and a visible error. A different saved profile requires
+switching back or explicitly exporting the intended profile.
+
+Browser refreshes poll every second during loading/startup and about once a minute
+when idle. They request local-only recalculation when due, not another Anki scan.
+Each worker permits only one scan at a time and waits at least 60 seconds after a
+scan finishes before polling can schedule another. Digest-based
+classification reuse avoids reparsing unchanged pages. Remote imports become
+visible through these recalculations. Inventory reconciliation also notifies the
+existing remote scheduler, under unchanged missing-HTML and retention rules.
+The worker runs even without remote configuration and cancels on shutdown without
+waiting for Anki network requests.
+
+The owner-requested introductory description, Refresh coverage button, routine
+remote-preparation summary, mode explanation, and pacing counters were removed.
+Pending-list coverage, batch results, cooldown notices, and actual errors remain.
+
+Offline verification covers every category/denominator, invalid fields, missing/
+corrupt/replaced bytes, meaningful case, saved-first publication, inventory changes,
+Anki failure/profile switches/partial reads, legacy upgrades, cancellation, local-
+index discrepancies, app lifespan, and the local-only status route. No live Anki
+or Diki call was used to verify the implementation.
+
+The missing/unusable split passed the full project check: Ruff, Pyright, 298 tests
+(292 passed, 6 skipped), and the frontend TypeScript/build. Its offline regression
+distinguishes absent files from corrupt, unreadable, and unindexed local files,
+while keeping all notes in the coverage denominator.
+
+## Loading progress
+
+Implemented 2026-11-24 after the owner requested visibility into the work behind
+“Reading local cache…”. `/backend/offline-coverage` now reads in-memory worker
+state rather than running the cache scan inside the HTTP request. One additional
+application-scoped worker performs pending-list coverage scans with its own local
+resource handle. It runs independently of existing-note classification and remote
+preparation and performs no dictionary fetching.
+
+While loading, the panel shows the current stage, processed/total items, remaining
+items, and percentage. Each stage measures its own work: cached resource records,
+ready recordings whose provenance is checked, list-word occurrences across
+sources, or notes whose HTML is classified. Counts advance after each item has
+been processed. Discovery/index reads and the Anki inventory check use an
+indeterminate bar while no reliable total is available. There is no invented
+overall percentage across different stages.
+
+Progress polling reuses an active scan without queuing another. Both workers
+retain previously completed statistics during refreshes and publish a new result
+only after its scan succeeds. Pending-list and note results are displayed
+independently as soon as they are ready. An error stops the affected loading bar
+and is shown alongside any retained results. Empty scans have zero work; shutdown
+signals cancellation without joining scan/network waits.
+
+The full project check passed Ruff lint/format (67 Python files), Pyright,
+304 tests (298 passed, 6 skipped), and the frontend TypeScript/build. Added offline
+regressions cover real per-stage resource/recording/list/note totals, zero work,
+nonblocking polling/coalescing, retained results on failure, cancellation, and the
+lightweight route/lifespan integration. No personal cache or live integration was
+used for verification.
 
 ## Authority and verification
 

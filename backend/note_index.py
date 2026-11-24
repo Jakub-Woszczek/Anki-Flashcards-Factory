@@ -99,6 +99,51 @@ class NotesDatabase:
             ).fetchone()
         return row["note_id"] if row else None
 
+    def inventory_discrepancies(self, inventory):
+        """Compare the advisory index with Anki's snapshot without changing either."""
+        with self._connect() as connection:
+            rows = connection.execute("SELECT en_word, note_id FROM note_index").fetchall()
+        by_id = {row["note_id"]: row for row in rows}
+        by_word = {self.normalize_word(row["en_word"]): row for row in rows}
+        notes = {note["noteId"]: note for note in inventory["notes"]}
+        issues = []
+        for note_id, note in notes.items():
+            if note.get("error"):
+                continue
+            indexed = by_id.get(note_id)
+            if indexed is None:
+                candidate = by_word.get(self.normalize_word(note["word"]))
+                issues.append(
+                    {
+                        "noteId": note_id,
+                        "word": note["word"],
+                        "reason": "Word points to a different note in the local index"
+                        if candidate is not None
+                        else "Note is missing from the local index",
+                        "indexedNoteId": candidate["note_id"] if candidate is not None else None,
+                    }
+                )
+        for row in rows:
+            note = notes.get(row["note_id"])
+            if note is None:
+                issues.append(
+                    {
+                        "noteId": row["note_id"],
+                        "word": row["en_word"],
+                        "reason": "Indexed note is outside the current Anki inventory",
+                    }
+                )
+            elif not note.get("error") and row["en_word"] != note["word"]:
+                issues.append(
+                    {
+                        "noteId": row["note_id"],
+                        "word": note["word"],
+                        "reason": "English value differs from the local index",
+                        "indexedWord": row["en_word"],
+                    }
+                )
+        return issues
+
     def add_word(self, note_id: int, en_word: str) -> bool:
         """
         Dodaje jedno słowo do bazy.
