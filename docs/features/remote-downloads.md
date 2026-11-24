@@ -26,7 +26,7 @@ advertised recording URLs, the local HTML digest, and selector version. Missing
 recording links are recorded locally; exhausted remote URLs produce a small
 no-audio receipt. Audio-only transfers require the original local HTML.
 
-Default budgets remain 100 upstream attempts and 3,600 active work seconds per
+Default budgets are 400 upstream attempts and 3,600 active work seconds per
 UTC day, 180-second slices, 10 words/cycle, 128 MiB pending payloads, 60-second idle
 polling, and five failed attempts before explicit retry. Requests use the existing
 20±5-second pacing and adaptive cooldowns. Manual retry/redownload flags preserve
@@ -51,6 +51,20 @@ global budgets/cooldowns and guard old ACKs against new job generations.
 - Bearer secrets stay in runtime configuration, HTTPS certificates are verified,
   redirects are refused, source URLs are allow-listed, and artifacts use SHA-256.
   No credential or certificate is embedded in the image.
+
+## Daily request limit — 2026-11-24
+
+At the owner's request, the worker's daily Diki HTTP-attempt default increased
+from 100 to **400** in both configuration paths and the deployment environment
+example. All attempts, including failures and 404s, count toward this limit.
+The separate 3,600-second active-work budget includes pacing waits and can stop
+work before 400 attempts are used. Priorities, pacing, cooldowns, and the UTC reset
+retain their existing rules.
+
+Existing deployments must set `REMOTE_REQUESTS_PER_DAY=400` if they explicitly
+configured the old value, then redeploy and verify `requestLimit: 400` through
+remote status. A code push alone does not override a deployed environment value.
+See [deployment budgets](../../deploy/northflank/README.md#budgets-and-pacing).
 
 ## Automatic scheduling — 2026-11-23
 

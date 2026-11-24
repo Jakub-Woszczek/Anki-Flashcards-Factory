@@ -7,7 +7,7 @@ from pathlib import Path
 class Config:
     data_dir: Path
     token: str
-    requests_per_day: int = 100
+    requests_per_day: int = 400
     work_seconds_per_day: int = 3600
     batch_seconds: int = 180
     batch_words: int = 10
@@ -56,7 +56,7 @@ class Config:
         return cls(
             data_dir=Path(os.getenv("REMOTE_DATA_DIR", "/data")),
             token=os.getenv("REMOTE_API_TOKEN", ""),
-            requests_per_day=int(os.getenv("REMOTE_REQUESTS_PER_DAY", "100")),
+            requests_per_day=int(os.getenv("REMOTE_REQUESTS_PER_DAY", "400")),
             work_seconds_per_day=int(os.getenv("REMOTE_WORK_SECONDS_PER_DAY", "3600")),
             batch_seconds=int(os.getenv("REMOTE_BATCH_SECONDS", "180")),
             batch_words=int(os.getenv("REMOTE_BATCH_WORDS", "10")),

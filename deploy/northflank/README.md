@@ -274,12 +274,21 @@ repeat attempt. Persisted reservations and attempt limits bound that case.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `REMOTE_REQUESTS_PER_DAY` | 100 | All reserved upstream HTTP attempts, including failures/404s |
+| `REMOTE_REQUESTS_PER_DAY` | 400 | All reserved upstream HTTP attempts, including failures/404s |
 | `REMOTE_WORK_SECONDS_PER_DAY` | 3600 | Elapsed active work-slice time, including pacing waits |
 | `REMOTE_BATCH_SECONDS` | 180 | Maximum reserved work slice; must exceed 15 seconds |
 | `REMOTE_BATCH_WORDS` | 10 | Words attempted per cycle |
 | `REMOTE_MAX_PENDING_MB` | 128 | MiB of indexed HTML/MP3 payloads (not total volume size) |
 | `REMOTE_POLL_SECONDS` | 60 | Idle interval between cycles |
+
+The daily request default was raised from 100 to 400 on 2026-11-24. For an existing
+deployment with `REMOTE_REQUESTS_PER_DAY=100` set explicitly, change that runtime
+variable to `400`; it overrides the code default even after redeployment. Redeploy
+the worker to apply the configuration and confirm `requestLimit: 400` with
+`python -m tools.diki_remote status`.
+
+The separate 3,600-second active-work budget still applies and includes pacing
+waits, so 400 is an attempt ceiling, not a daily throughput guarantee.
 
 Both daily budgets reset at midnight **UTC** and survive restarts. HTTP attempts
 are reserved before network I/O; a crash cannot refund them. A full runtime
