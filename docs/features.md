@@ -1,6 +1,6 @@
 # Feature map and specification coverage
 
-Last updated: 2026-11-24.
+Last updated: 2026-11-25.
 
 This is a living capability inventory. "Present" means observed in code or live
 Anki where noted, not that every path meets its intended contract or was freshly
@@ -44,6 +44,7 @@ Contracts and ADRs retain ownership of detailed rules and decisions.
 
 | Completed | Change | Documentation |
 | --- | --- | --- |
+| 2026-11-25 | Added ready HTML totals/category counts and separate audio-only counts to remote status, with local backfill of existing jobs | [Ready HTML categories](features/remote-downloads.md#ready-html-categories--2026-11-25) |
 | 2026-11-24 | Raised the remote worker's daily Diki HTTP-attempt default from 100 to 400 | [Daily request limit](features/remote-downloads.md#daily-request-limit--2026-11-24) |
 | 2026-11-24 | Added real per-stage loading bars and processed/remaining counts; moved pending-list coverage out of the HTTP request into a coalesced background scan | [Loading progress](features/offline-cache.md#loading-progress) |
 | 2026-11-24 | Added strict existing-note HTML category coverage, manual-review list, and saved-first startup reconciliation; simplified Offline downloads text | [Existing-note HTML coverage](features/offline-cache.md#strict-coverage-for-existing-anki-notes), [ADR 0010](decisions/0010-existing-note-html-coverage.md) |

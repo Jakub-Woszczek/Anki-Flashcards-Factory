@@ -145,6 +145,40 @@ python -m tools.diki_remote coverage
 python -m tools.diki_remote coverage --file existing-words.txt
 ```
 
+### Ready HTML breakdown in status
+
+`python -m tools.diki_remote status` retains the numeric `jobs.ready` and also
+reports:
+
+```json
+"readyHtml": {
+  "total": 271,
+  "categories": {
+    "entries": 250,
+    "suggestions": 8,
+    "related": 5,
+    "collocation": 3,
+    "not_found": 5,
+    "unknown": 0,
+    "missing": 0,
+    "unusable": 0
+  }
+},
+"readyAudioOnly": 0
+```
+
+These example numbers are illustrative. The categories use the application's
+shared primary-result classifier. HTML categories sum to `readyHtml.total`, and
+that total plus `readyAudioOnly` equals the ready-job count. This includes jobs in
+an unacknowledged transfer; they leave the counts only on ACK or requeue. Audio-only
+jobs, including no-audio receipts, are counted separately.
+
+Redeploy the worker to add these fields. Existing ready HTML is classified once
+from retained bytes during initialization, without dictionary requests or changes
+to frozen manifests. `missing`/`unusable` distinguish unavailable or unverifiable
+retained HTML and are reconsidered on restart. Subsequent status checks read saved
+classification metadata, not HTML files. See [the feature record](../../docs/features/remote-downloads.md#ready-html-categories--2026-11-25).
+
 ### Automatic application scheduling
 
 With both remote settings configured, a normal app launch prepares the first

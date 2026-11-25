@@ -1,6 +1,6 @@
 # Remote Diki downloader
 
-Last updated: 2026-11-24. Manual downloads verified live; automatic scheduling
+Last updated: 2026-11-25. Manual downloads verified live; automatic scheduling
 implemented locally and requires an updated worker deployment.
 
 The owner requested restoring the Northflank downloader from stash
@@ -51,6 +51,46 @@ global budgets/cooldowns and guard old ACKs against new job generations.
 - Bearer secrets stay in runtime configuration, HTTPS certificates are verified,
   redirects are refused, source URLs are allow-listed, and artifacts use SHA-256.
   No credential or certificate is embedded in the image.
+
+## Ready HTML categories — 2026-11-25
+
+Remote status keeps the existing numeric `jobs.ready` and adds `readyHtml` with a
+`total` and `categories` count map, plus a separate `readyAudioOnly` count. HTML
+categories use the same `external_apis.diki_page.inspect_page` primary result as
+the application's [existing-note statistics](offline-cache.md#strict-coverage-for-existing-anki-notes):
+`entries`, `suggestions`, `related`, `collocation`, `not_found`, and `unknown`.
+Zero-count categories remain visible. Backfill also reports `missing` for absent
+HTML and `unusable` for unreadable or integrity-mismatched HTML; neither is silently
+counted as an entry. Unprocessable Anki fields do not reach the node's word queue.
+
+These are ready-job counts, not Anki-note counts or a cumulative download history.
+`readyHtml.total` includes every ready HTML job, including missing/unusable ones;
+its categories sum to that total. `readyHtml.total + readyAudioOnly` equals the
+number of ready jobs. Audio-only jobs, including no-audio receipts without a
+payload, do not contribute to HTML counts even if reusable HTML remains on disk.
+Jobs stay ready while their manifest is in flight and leave these counts on ACK,
+or when an unbatched job is promoted into a queued generation.
+
+New ready jobs persist their HTML category and validated artifact digest together.
+On worker initialization, an additive migration backfills pre-upgrade ready jobs
+from retained files, checking both cache integrity and the frozen artifact digest.
+Missing/unusable backfill results are reconsidered on a later restart. Status
+requests aggregate saved classifications in one SQLite snapshot; they do not read
+or reparse HTML, contact Diki, repair files, or change transfer state. This is a
+classification snapshot, not a continuous disk-integrity audit. The existing
+validator still rejects unknown downloaded layouts before they become ready.
+
+The worker must be redeployed to expose these additive status fields. Existing
+queues, budgets, stable manifests, transfer protocol, and client commands are
+preserved. The existing `python -m tools.diki_remote status` command prints the new
+fields directly; older clients can continue using the original numeric job counts.
+
+Verification uses temporary data and fake HTTP: six offline regressions cover
+app/node category agreement, zero counts, migration without refetch or manifest
+changes, persisted classifications across restart, cheap read-only status, missing/
+corrupt/changed HTML, audio-only negative receipts, and generation/ACK transitions.
+The full project check passed Ruff lint/format (68 Python files), Pyright with zero
+errors/warnings, 310 tests (304 passed, 6 skipped), and the frontend TypeScript/build.
 
 ## Daily request limit — 2026-11-24
 

@@ -1,6 +1,7 @@
 """Durable single-consumer download queue and acknowledge-before-delete outbox."""
 
 import base64
+import hashlib
 import json
 import logging
 import os
@@ -9,11 +10,14 @@ import threading
 import time
 import uuid
 from datetime import UTC, datetime, timedelta
+from typing import get_args
 
 import requests
+from bs4 import BeautifulSoup
 from urllib3.exceptions import HTTPError as UrllibError
 
 from external_apis.diki_audio import DISCOVERY_VERSION, validate_audio_plan
+from external_apis.diki_page import PageKind, inspect_page
 from external_apis.diki_resources import (
     TIMEOUT,
     BatchDeadline,
@@ -144,6 +148,49 @@ class DownloadService:
                 db.execute("ALTER TABLE remote_jobs ADD COLUMN priority INTEGER NOT NULL DEFAULT 0")
             if "followup" not in columns:
                 db.execute("ALTER TABLE remote_jobs ADD COLUMN followup TEXT")
+            if "html_kind" not in columns:
+                db.execute("ALTER TABLE remote_jobs ADD COLUMN html_kind TEXT")
+            if "html_digest" not in columns:
+                db.execute("ALTER TABLE remote_jobs ADD COLUMN html_digest TEXT")
+        self._backfill_ready_html()
+
+    def _backfill_ready_html(self):
+        """Classify pre-upgrade ready jobs locally without changing their transfer manifests."""
+        with self.resources.db() as db:
+            jobs = db.execute(
+                """SELECT id,word,artifacts FROM remote_jobs
+                WHERE state='ready' AND audio_plan IS NULL
+                AND (html_kind IS NULL OR html_digest IS NULL OR html_kind IN ('missing','unusable'))"""
+            ).fetchall()
+        for job in jobs:
+            kind, html_digest = "unusable", None
+            try:
+                artifact = next(
+                    item for item in json.loads(job["artifacts"] or "[]") if item["kind"] == "html"
+                )
+                html_digest = artifact["digest"]
+                with file_lock(self.config.data_dir / "cache.lock"):
+                    content = self.resources._read_cached(job["word"], "html")
+                    if content is None:
+                        try:
+                            self.resources.path(job["word"], "html").stat()
+                        except FileNotFoundError:
+                            kind = "missing"
+                    elif (
+                        len(content) == artifact["size"]
+                        and hashlib.sha256(content).hexdigest() == html_digest
+                    ):
+                        kind = inspect_page(
+                            BeautifulSoup(content.decode("utf-8", errors="replace"), "html.parser")
+                        ).kind
+            except (OSError, ValueError, KeyError, TypeError, StopIteration):
+                log.warning("Could not classify retained HTML for ready job %s", job["id"])
+            with self.resources.db() as db:
+                db.execute(
+                    """UPDATE remote_jobs SET html_kind=?,html_digest=?
+                    WHERE id=? AND state='ready' AND audio_plan IS NULL""",
+                    (kind, html_digest, job["id"]),
+                )
 
     def _sleep(self, seconds):
         if self.stop_event.wait(seconds):
@@ -383,7 +430,8 @@ class DownloadService:
                 db.execute(
                     """UPDATE remote_jobs SET id=?,state='queued',need_audio=1,
                     created_at=?,updated_at=?,retry_at=0,attempts=0,error=NULL,
-                    audio_state=NULL,artifacts=NULL,batch_id=NULL,cleaned=0,audio_plan=?,followup=NULL
+                    audio_state=NULL,artifacts=NULL,batch_id=NULL,cleaned=0,audio_plan=?,followup=NULL,
+                    html_kind=NULL,html_digest=NULL
                     WHERE id=?""",
                     (uuid.uuid4().hex, self.clock(), self.clock(), plan_json, old["id"]),
                 )
@@ -405,6 +453,7 @@ class DownloadService:
 
     def _ready(self, job, audio_state):
         resources = []
+        html_kind, html_digest = None, None
         kinds = (
             (["audio"] if audio_state == "ready" else [])
             if job["audio_plan"]
@@ -418,6 +467,11 @@ class DownloadService:
             artifact = {key: row[key] for key in ("kind", "digest", "size", "status", "source")}
             validate_artifact(artifact, data, job["word"])
             resources.append(artifact)
+            if kind == "html":
+                html_kind = inspect_page(
+                    BeautifulSoup(data.decode("utf-8", errors="replace"), "html.parser")
+                ).kind
+                html_digest = artifact["digest"]
         with self.lock, self.resources.db() as db:
             current = db.execute(
                 "SELECT need_audio FROM remote_jobs WHERE id=?", (job["id"],)
@@ -426,8 +480,16 @@ class DownloadService:
                 db.execute("UPDATE remote_jobs SET state='queued' WHERE id=?", (job["id"],))
                 return
             db.execute(
-                "UPDATE remote_jobs SET state='ready',audio_state=?,artifacts=?,error=NULL,retry_at=0,updated_at=? WHERE id=?",
-                (audio_state, json.dumps(resources), self.clock(), job["id"]),
+                """UPDATE remote_jobs SET state='ready',audio_state=?,artifacts=?,error=NULL,
+                retry_at=0,updated_at=?,html_kind=?,html_digest=? WHERE id=?""",
+                (
+                    audio_state,
+                    json.dumps(resources),
+                    self.clock(),
+                    html_kind,
+                    html_digest,
+                    job["id"],
+                ),
             )
 
     def run_cycle(self):
@@ -711,7 +773,7 @@ class DownloadService:
                                 """UPDATE remote_jobs SET id=?,state='queued',need_audio=1,
                                 created_at=?,updated_at=?,retry_at=0,attempts=0,error=NULL,
                                 audio_state=NULL,artifacts=NULL,batch_id=NULL,followup=NULL,
-                                audio_plan=?,priority=? WHERE id=?""",
+                                audio_plan=?,priority=?,html_kind=NULL,html_digest=NULL WHERE id=?""",
                                 (
                                     uuid.uuid4().hex,
                                     self.clock(),
@@ -743,9 +805,20 @@ class DownloadService:
     def status(self):
         day, tomorrow = self._day()
         with self.resources.db() as db:
+            # Keep totals and the category breakdown on one read-only snapshot.
+            db.execute("BEGIN")
             jobs = dict(
                 db.execute("SELECT state,COUNT(*) FROM remote_jobs GROUP BY state").fetchall()
             )
+            categories = dict.fromkeys((*get_args(PageKind), "missing", "unusable"), 0)
+            for kind, count in db.execute(
+                """SELECT html_kind,COUNT(*) FROM remote_jobs
+                WHERE state='ready' AND audio_plan IS NULL GROUP BY html_kind"""
+            ):
+                categories[kind if kind in categories else "unusable"] += count
+            audio_only = db.execute(
+                "SELECT COUNT(*) FROM remote_jobs WHERE state='ready' AND audio_plan IS NOT NULL"
+            ).fetchone()[0]
             usage = db.execute("SELECT * FROM remote_usage WHERE day=?", (day,)).fetchone()
             used_bytes = db.execute(
                 "SELECT COALESCE(SUM(size),0) FROM resources WHERE digest IS NOT NULL"
@@ -760,6 +833,8 @@ class DownloadService:
             "protocol": PROTOCOL,
             "schedulingVersion": 1,
             "jobs": jobs,
+            "readyHtml": {"total": sum(categories.values()), "categories": categories},
+            "readyAudioOnly": audio_only,
             "state": self.resources.setting("remote_state"),
             "requestsToday": usage["requests"] if usage else 0,
             "requestLimit": self.config.requests_per_day,
